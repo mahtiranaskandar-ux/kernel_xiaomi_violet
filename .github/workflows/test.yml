@@ -1,9 +1,9 @@
-name: Build Kernel (violet | SukiSU Ultra + jeejox + susfs2)
+name: Build Kernel (violet | SukiSU Ultra + jeejox)
 
 on:
   push:
     branches:
-      - test
+      - test2
   workflow_dispatch:
 
 jobs:
@@ -14,7 +14,7 @@ jobs:
     - name: Checkout kernel source
       uses: actions/checkout@v4
       with:
-        ref: test
+        ref: test2
         fetch-depth: 1
 
     - name: Install dependencies
@@ -36,15 +36,14 @@ jobs:
         tar -xzf Clang-15.0.7-20251111.tar.gz -C clang
         echo "$PWD/clang/bin" >> $GITHUB_PATH
 
-    # KernelSU Ultra — fork 6 جانفي — بدون تحديث
-    - name: Inject SukiSU Ultra (Jan 6 fork)
+    # KernelSU Ultra — main branch — builtin
+    - name: Inject SukiSU Ultra (main | builtin)
       run: |
-        echo "SukiSU Ultra fork (Jan 6)"
-        curl -LSs \
-          https://raw.githubusercontent.com/mahtiranaskandar-ux/SukiSU-Ultra/Suki/kernel/setup.sh \
-          | bash
+        echo "SukiSU Ultra main (builtin)"
+        curl -LSs https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU-Ultra/main/kernel/setup.sh \
+          | bash -s builtin
 
-    # Apply KernelSU non-GKI
+    # KernelSU non-GKI patches
     - name: Apply KernelSU non-GKI individual patches
       run: |
         curl -L https://raw.githubusercontent.com/jonjeexe/KernelSU_Patches/non-GKI/0001-fs-exec-add-ksu-execveat-hook.patch | patch -p1 || true
@@ -53,19 +52,6 @@ jobs:
         curl -L https://raw.githubusercontent.com/jonjeexe/KernelSU_Patches/non-GKI/0004-fs-stat-add-ksu-vfs_statx-hook.patch | patch -p1 || true
         curl -L https://raw.githubusercontent.com/jonjeexe/KernelSU_Patches/non-GKI/0005-drivers-input-input-add-ksu-input_handle_event-hook.patch | patch -p1 || true
         curl -fsSL https://raw.githubusercontent.com/jonjeexe/KernelSU_Patches/non-GKI/0006-fs-namespace-add-path-umount-hook.patch | patch -p1 || true
-
-    # SUSFS 2.0 — كما هو
-    - name: Apply susfs 2.0 patch
-      run: |
-        set +e
-        curl -fsSL https://raw.githubusercontent.com/TheSillyOk/kernel_ls_patches/master/susfs-2.0.0.patch \
-          | patch -p1 --batch --forward
-        set -e
-
-    - name: Verify susfs files
-      run: |
-        test -f fs/susfs.c || exit 1
-        test -f include/linux/susfs.h || exit 1
 
     - name: Export build environment
       run: |
@@ -90,10 +76,10 @@ jobs:
         git clone --depth=1 -b sixteen https://github.com/Joker-V2/AnyKernel3.git AK3
         cp out/arch/arm64/boot/Image.gz AK3/
         cd AK3
-        zip -r9 ../Kernel-violet-sukisu-susfs2.zip *
+        zip -r9 ../Kernel-violet-sukisu.zip *
 
     - name: Upload artifacts
       uses: actions/upload-artifact@v4
       with:
-        name: Kernel-violet-sukisu-susfs2
-        path: Kernel-violet-sukisu-susfs2.zip
+        name: Kernel-violet-sukisu
+        path: Kernel-violet-sukisu.zip
