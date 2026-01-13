@@ -42,7 +42,7 @@ jobs:
         set -e
         curl -LSs https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU-Ultra/main/kernel/setup.sh | bash
 
-    # 2️⃣ Lock KernelSU to Jan 6 commit
+    # 2️⃣ Lock KernelSU commit (Jan 6)
     - name: Lock KernelSU commit (Jan 6)
       run: |
         set -e
@@ -96,16 +96,15 @@ jobs:
       run: |
         make O=out vendor/violet-perf_defconfig
 
-    # 8️⃣ Build kernel (✅ التعديل الوحيد)
+    # 8️⃣ Build kernel
     - name: Build kernel
       run: |
         set -o pipefail
-        make O=out -j$(nproc) V=1 2>&1 | tee build.log
+        make O=out -j$(nproc) 2>&1 | tee build.log
 
     # 8️⃣5️⃣ Verify hooks.o built
     - name: Verify hooks.o built
       run: |
-        echo "== Checking hooks.o in build.log =="
         grep -E "hooks\.o" build.log > hooks-build.txt || true
 
         if [ ! -s hooks-build.txt ]; then
@@ -113,11 +112,17 @@ jobs:
           exit 1
         fi
 
-        echo "✅ hooks.o detected in build"
+        echo "✅ hooks.o detected"
 
-    # 9️⃣ KernelSU symbol analysis
+    # 9️⃣ KernelSU symbol analysis (SAFE)
     - name: KernelSU symbol check
       run: |
+        if [ ! -f out/vmlinux ]; then
+          echo "❌ vmlinux not found – build failed before final link"
+          tail -n 200 build.log > build-tail.txt
+          exit 1
+        fi
+
         nm out/vmlinux | grep -E "ksu_|kernelsu" > nm-ksu.txt || true
         nm out/vmlinux | grep -i hook > nm-hook.txt || true
         nm out/vmlinux > nm-full.txt
@@ -134,7 +139,7 @@ jobs:
 
         echo "✅ KernelSU fully registered"
 
-    # 9️⃣5️⃣ dmesg KernelSU check
+    # 9️⃣5️⃣ dmesg check (non-fatal)
     - name: dmesg KernelSU check
       run: |
         dmesg | grep -i ksu > dmesg-ksu.txt || true
@@ -147,15 +152,16 @@ jobs:
         cd AK3
         zip -r9 ../Kernel-violet-sukisu-susfs2.zip *
 
-    # 1️⃣1️⃣ Upload artifacts
+    # 1️⃣1️⃣ Upload artifacts (ALWAYS)
     - name: Upload artifacts
       if: always()
       uses: actions/upload-artifact@v4
       with:
-        name: Kernel-violet-sukisu-susfs2
+        name: Kernel-violet-debug
         path: |
           Kernel-violet-sukisu-susfs2.zip
           build.log
+          build-tail.txt
           nm-ksu.txt
           nm-hook.txt
           nm-full.txt
