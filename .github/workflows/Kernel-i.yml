@@ -33,7 +33,7 @@ jobs:
           openjdk-17-jre-headless \
           ccache \
           zstd \
-          zstd-static 
+          zstd
 
     # 🆕 تحرير مساحة القرص
     - name: Free up disk space
