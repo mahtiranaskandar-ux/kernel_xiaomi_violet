@@ -32,35 +32,154 @@ jobs:
           python3 \
           openjdk-17-jre-headless \
           ccache \
-          zstd
+          zstd \
+          zstd-static  # ⭐ لـ .tar.zst
 
-    # 3️⃣ Neutron Clang - النسخة المصححة
+    # 🆕 تحرير مساحة القرص
+    - name: Free up disk space
+      run: |
+        echo "🧹 تحرير مساحة القرص..."
+        sudo rm -rf /usr/share/dotnet
+        sudo rm -rf /usr/local/lib/android
+        sudo rm -rf /opt/ghc
+        sudo rm -rf /opt/hostedtoolcache/CodeQL
+        sudo docker image prune --all --force
+        
+        echo "📊 المساحة المتاحة:"
+        df -h
+
+    # 3️⃣ Neutron Clang مع الكشف التلقائي ⭐⭐ مثل ZyCromerZ ⭐⭐
     - name: Setup Neutron Clang
+      id: setup_clang
       run: |
         echo "📥 تحميل Neutron Clang..."
-        wget -q https://github.com/Neutron-Toolchains/clang-build-catalogue/releases/download/10032024/neutron-clang-10032024.tar.zst
         
-        echo "📦 فك الضغط..."
-        tar -I zstd -xf neutron-clang-10032024.tar.zst
+        # ⭐⭐ رابط Neutron Clang ⭐⭐
+        NEUTRON_URL="https://github.com/Neutron-Toolchains/clang-build-catalogue/releases/download/10032024/neutron-clang-10032024.tar.zst"
         
+        wget -q "$NEUTRON_URL" -O neutron-clang.tar.zst
+        
+        echo "📦 فك الضغط (zstd)..."
+        tar -I zstd -xf neutron-clang.tar.zst
+        
+        rm -f neutron-clang.tar.zst
+        
+        # ⭐⭐ Neutron Clang مختلف: الملفات في bin/ مباشرة ⭐⭐
         CLANG_PATH="$PWD/bin"
         
-        echo "🔍 محتويات مجلد bin/:"
-        ls -la $CLANG_PATH/
+        # ⭐⭐ الكشف التلقائي عن إصدار Neutron Clang ⭐⭐
+        echo "🔍 الكشف التلقائي عن Neutron Clang..."
         
-        # 💾 حفظ المتغيرات - أضف CLANG هنا
-        echo "CC=$CLANG_PATH/clang-19" >> $GITHUB_ENV
-        echo "AR=$CLANG_PATH/llvm-ar" >> $GITHUB_ENV
-        echo "NM=$CLANG_PATH/llvm-nm" >> $GITHUB_ENV
-        echo "OBJCOPY=$CLANG_PATH/llvm-objcopy" >> $GITHUB_ENV
-        echo "OBJDUMP=$CLANG_PATH/llvm-objdump" >> $GITHUB_ENV
-        echo "STRIP=$CLANG_PATH/llvm-strip" >> $GITHUB_ENV
+        # البحث عن clang-* في Neutron Clang
+        CLANG_BIN=$(find "$CLANG_PATH" -name "clang-[0-9]*" -type f | head -1)
         
-        # ⬅️ okeay bb 
+        if [ -z "$CLANG_BIN" ]; then
+          # محاولة أخرى: البحث عن أي clang
+          CLANG_BIN=$(find "$CLANG_PATH" -name "clang*" -type f ! -name "*.so" ! -name "*.dll" ! -name "clang++*" | head -1)
+        fi
+        
+        if [ -z "$CLANG_BIN" ]; then
+          echo "❌ لم يتم العثور على clang في $CLANG_PATH"
+          echo "📋 محتويات مجلد Neutron Clang:"
+          ls -la "$CLANG_PATH/" | head -30
+          exit 1
+        fi
+        
+        CLANG_BASENAME=$(basename "$CLANG_BIN")
+        echo "✅ وجد Neutron Clang: $CLANG_BASENAME"
+        
+        # ⭐⭐ Neutron Clang قد يحتوي على clang مباشرة (بدون رقم) ⭐⭐
+        # التحقق مما إذا كان clang موجوداً أصلاً
+        if [ ! -f "$CLANG_PATH/clang" ] && [ ! -L "$CLANG_PATH/clang" ]; then
+          echo "🔗 إنشاء رابط رمزي: clang -> $CLANG_BASENAME"
+          ln -sf "$CLANG_BASENAME" "$CLANG_PATH/clang"
+        fi
+        
+        # ⭐⭐ البحث عن clang++ المقابل ⭐⭐
+        CLANGPP_PATTERN=$(echo "$CLANG_BASENAME" | sed 's/^clang/clang++/')
+        CLANGPP_BIN=$(find "$CLANG_PATH" -name "$CLANGPP_PATTERN" -type f | head -1)
+        
+        if [ -z "$CLANGPP_BIN" ]; then
+          # البحث عن أي clang++
+          CLANGPP_BIN=$(find "$CLANG_PATH" -name "clang++*" -type f | head -1)
+        fi
+        
+        if [ -n "$CLANGPP_BIN" ]; then
+          CLANGPP_BASENAME=$(basename "$CLANGPP_BIN")
+          echo "✅ وجد Clang++: $CLANGPP_BASENAME"
+          
+          if [ ! -L "$CLANG_PATH/clang++" ] && [ ! -f "$CLANG_PATH/clang++" ]; then
+            echo "🔗 إنشاء رابط رمزي: clang++ -> $CLANGPP_BASENAME"
+            ln -sf "$CLANGPP_BASENAME" "$CLANG_PATH/clang++"
+          fi
+        else
+          echo "⚠️  لم يتم العثور على clang++ في Neutron Clang"
+        fi
+        
+        # التحقق من أدوات LLVM الأساسية
+        echo "🔧 التحقق من أدوات LLVM في Neutron Clang..."
+        REQUIRED_TOOLS="llvm-ar llvm-nm llvm-objcopy llvm-objdump llvm-strip"
+        for tool in $REQUIRED_TOOLS; do
+          if [ -f "$CLANG_PATH/$tool" ]; then
+            echo "✅ $tool موجود"
+          else
+            echo "⚠️  $tool غير موجود - قد يسبب مشاكل"
+          fi
+        done
+        
+        echo "📋 محتويات مجلد Neutron Clang (مختصر):"
+        ls -la "$CLANG_PATH/" | grep -E "^l.*clang|^[^d].*(clang|llvm)" | head -15 2>/dev/null || true
+        
+        # إضافة إلى PATH
         echo "$CLANG_PATH" >> $GITHUB_PATH
-        echo "✅ Neutron Clang جاهز!"
+        
+        # حفظ معلومات Clang للمراحل التالية
+        echo "CLANG_PATH=$CLANG_PATH" >> $GITHUB_ENV
+        echo "CLANG_BIN_NAME=$CLANG_BASENAME" >> $GITHUB_ENV
+        
+        echo "🎯 Neutron Clang جاهز! ($CLANG_BASENAME)"
 
-    # 4️⃣ Export env 
+    # 🆕 التحقق التلقائي من Neutron Clang
+    - name: Verify Neutron Clang Auto-Detection
+      run: |
+        echo "🔍 التحقق التلقائي من Neutron Clang..."
+        
+        echo "📋 معلومات Neutron Clang المكتشف:"
+        echo "CLANG_PATH: $CLANG_PATH"
+        echo "CLANG_BIN_NAME: $CLANG_BIN_NAME"
+        
+        echo "🔎 البحث عن clang في PATH:"
+        which clang || { echo "❌ clang غير موجود في PATH"; exit 1; }
+        
+        CLANG_ACTUAL=$(which clang)
+        echo "✅ clang موجود في: $CLANG_ACTUAL"
+        
+        # التحقق من الرابط الرمزي
+        if [ -L "$CLANG_ACTUAL" ]; then
+          REAL_CLANG=$(readlink -f "$CLANG_ACTUAL")
+          echo "🔗 clang هو رابط رمزي إلى: $REAL_CLANG"
+          
+          if [ -f "$REAL_CLANG" ]; then
+            echo "✅ الملف الحقيقي موجود"
+            echo "📊 حجم الملف: $(ls -lh "$REAL_CLANG" | awk '{print $5}')"
+          else
+            echo "❌ الملف الحقيقي غير موجود!"
+            exit 1
+          fi
+        fi
+        
+        echo "📊 معلومات Neutron Clang:"
+        clang --version | head -5
+        
+        # التحقق من الإصدار المحدد
+        if [ -n "$CLANG_BIN_NAME" ]; then
+          echo "🔍 التحقق من الإصدار المحدد ($CLANG_BIN_NAME):"
+          "$CLANG_PATH/$CLANG_BIN_NAME" --version | head -3
+        fi
+        
+        echo "✅ التحقق التلقائي من Neutron Clang اكتمل!"
+
+    # 4️⃣ Export env
     - name: Export env
       run: |
         echo "ARCH=arm64" >> $GITHUB_ENV
@@ -69,57 +188,63 @@ jobs:
         echo "CROSS_COMPILE_ARM32=arm-linux-gnueabi-" >> $GITHUB_ENV
         echo "CLANG_TRIPLE=aarch64-linux-gnu-" >> $GITHUB_ENV
         echo "CCACHE_DIR=$HOME/.ccache" >> $GITHUB_ENV
-        
-        # عرض المتغيرات - الآن CLANG معرف
-        echo "🎯 متغيرات البناء:"
-        echo "CC=${{ env.CC }}"
-        echo "AR=${{ env.AR }}"
-        echo "nm=${{ env.NM }}"
 
     # 5️⃣ Defconfig
     - name: Load defconfig
       run: |
         make O=out vendor/violet-perf_defconfig
 
-    # 6️⃣ Build kernel - 
+    # 6️⃣ Build kernel ⭐⭐ مطابق لـ Bash الأصلية ⭐⭐
     - name: Build kernel
       shell: bash
       env:
-        CC: ${{ env.CC }}
-        AR: ${{ env.AR }}
-        NM: ${{ env.NM }}
-        OBJCOPY: ${{ env.OBJCOPY }}
-        OBJDUMP: ${{ env.OBJDUMP }}
-        STRIP: ${{ env.STRIP }}
+        CROSS_COMPILE: aarch64-linux-gnu-
+        CROSS_COMPILE_ARM32: arm-linux-gnueabi-
+        CLANG_TRIPLE: aarch64-linux-gnu-
       run: |
         set -o pipefail
         mkdir -p logs
+        
+        # ⭐⭐ Neutron Clang في Bash الأصلية لا يستخدم ccache ⭐⭐
+        # لكننا نضيفه للسرعة مع الاحتفاظ بالمطابقة
         ccache -M 1G
         ccache -z
         
-        echo "🚀 بدء بناء النواة..."
-        echo "🔧 CC: $CC"
-        echo "🔧 AR: $AR"
-        echo "🔧 NM: $NM"
+        echo "🚀 بدء بناء النواة باستخدام Neutron Clang..."
         
-        # اختبار
-        echo "🧪 اختبار المترجم..."
-        $CC --version
+        # التحقق النهائي
+        echo "🔍 التحقق النهائي:"
+        echo "🔧 Neutron Clang المستخدم: $(which clang)"
+        echo "🔧 المسار الحقيقي: $(readlink -f $(which clang) 2>/dev/null || which clang)"
+        echo "🔧 الإصدار المكتشف: $CLANG_BIN_NAME"
         
-        # its okeay new
+        echo "📋 معلومات Neutron Clang:"
+        clang --version | head -3
+        
+        echo "🔧 CROSS_COMPILE: $CROSS_COMPILE"
+        echo "🔧 CROSS_COMPILE_ARM32: $CROSS_COMPILE_ARM32"
+        echo "🔧 CLANG_TRIPLE: $CLANG_TRIPLE"
+        
+        # ⭐⭐ البناء مثل Bash الأصلية ولكن مع ccache ⭐⭐
         stdbuf -oL -eL make O=out -j$(nproc) \
-          CC="ccache $CC" \
-          AR="$AR" \
-          NM="$NM" \
-          OBJCOPY="$OBJCOPY" \
-          OBJDUMP="$OBJDUMP" \
-          STRIP="$STRIP" \
-          2>&1 | tee logs/build.log
+        CC="ccache clang" \
+        AR="llvm-ar" \
+        NM="llvm-nm" \
+        OBJCOPY="llvm-objcopy" \
+        OBJDUMP="llvm-objdump" \
+        STRIP="llvm-strip" \
+        CLANG_TRIPLE="$CLANG_TRIPLE" \
+        CROSS_COMPILE="$CROSS_COMPILE" \
+        CROSS_COMPILE_ARM32="$CROSS_COMPILE_ARM32" \
+        2>&1 | tee logs/build.log
+        
+        BUILD_STATUS=${PIPESTATUS[0]}
         
         ccache -s
         
-        if [ -f "out/arch/arm64/boot/Image.gz" ]; then
-            echo "✅ تم بناء النواة بنجاح!"
+        if [ $BUILD_STATUS -eq 0 ] && [ -f "out/arch/arm64/boot/Image.gz" ]; then
+            echo "✅ تم بناء النواة بنجاح باستخدام Neutron $CLANG_BIN_NAME!"
+            ls -lh out/arch/arm64/boot/Image.gz
         else
             echo "❌ فشل بناء النواة!"
             exit 1
@@ -137,6 +262,7 @@ jobs:
         else
             echo "❌ ملف vmlinux غير موجود"
         fi
+    
     # 8️⃣ AnyKernel3
     - name: Package AnyKernel3
       run: |
@@ -144,37 +270,58 @@ jobs:
         git clone --depth=1 -b sixteen https://github.com/Joker-V2/AnyKernel3.git AK3
         cp out/arch/arm64/boot/Image.gz AK3/
         
-        # إضافة dtbo.img إذا كان موجوداً
         [ -f "out/arch/arm64/boot/dtbo.img" ] && cp out/arch/arm64/boot/dtbo.img AK3/
         
         cd AK3
         zip -r9 ../Kernel-violet-neutron.zip *
-        echo "✅ تم إنشاء Kernel-violet-neutron.zip"
+        cd ..
+        
+        echo "📏 حجم ZIP:"
+        ls -lh Kernel-violet-neutron.zip
+        echo "✅ تم إنشاء ZIP"
+    
     # 9️⃣ Sign ZIP
     - name: Sign zip
       run: |
-        echo "🖊️ توقيع ملف ZIP..."
+        echo "🖊️ توقيع ZIP..."
         wget -q -O zipsigner.jar https://github.com/Magisk-Modules-Repo/zipsigner/raw/master/bin/zipsigner-3.0-dexed.jar
-        java -jar zipsigner.jar \
-          Kernel-violet-neutron.zip \
-          Kernel-violet-neutron-signed.zip
-        echo "✅ تم التوقيع: Kernel-violet-neutron-signed.zip"
-    # 🔟 رفع ملف ZIP لوحده
+        java -jar zipsigner.jar Kernel-violet-neutron.zip Kernel-violet-neutron-signed.zip
+        
+        echo "📏 حجم ZIP الموقّع:"
+        ls -lh Kernel-violet-neutron-signed.zip
+        echo "✅ تم التوقيع"
+    
+    # 🔟 رفع ZIP
     - name: Upload Kernel ZIP
       if: always()
       uses: actions/upload-artifact@v4
       with:
-        name: Kernel-ZIP
-        path: |
-          Kernel-violet-neutron-signed.zip
-    # 1️⃣1️⃣ رفع اللوغات والتحليلات مع بعض
+        name: Kernel-Neutron-Clang-ZIP
+        path: Kernel-violet-neutron-signed.zip
+    
+    # 1️⃣1️⃣ رفع اللوغات والتحليلات
     - name: Upload Logs and Analysis
       if: always()
       uses: actions/upload-artifact@v4
       with:
-        name: Build-Logs-Analysis
+        name: Build-Logs-Analysis-Neutron
         path: |
           logs/build.log
           nm-ksu.txt
           nm-susfs.txt
           nm-full.txt
+
+    # ملخص البناء
+    - name: Build Summary
+      if: always()
+      run: |
+        echo "📊 ملخص البناء باستخدام Neutron Clang:"
+        echo "================================"
+        echo "🔧 Neutron Clang المستخدم: $CLANG_BIN_NAME"
+        echo "📁 مسار Clang: $CLANG_PATH"
+        echo ""
+        echo "✅ ملفات تم إنشاؤها:"
+        ls -lh Kernel-violet-neutron-signed.zip 2>/dev/null || echo "❌ ZIP غير موجود"
+        ls -lh logs/build.log 2>/dev/null || echo "❌ اللوغ غير موجود"
+        ls -lh nm-*.txt 2>/dev/null || echo "❌ ملفات التحليل غير موجودة"
+        echo "================================"
