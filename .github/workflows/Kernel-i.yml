@@ -154,13 +154,13 @@ jobs:
         # ⭐⭐ إضافة: البحث عن أدوات ld.bfd ⭐⭐
         echo "🔍 البحث عن أدوات ld.bfd..."
         if [ -f "$CLANG_PATH/aarch64-linux-gnu-ld.bfd" ]; then
-          echo "✅ aarch64-linux-gnu-ld.bfd موجود"
+          echo "✅ aarch64-linux-gnu-ld.bfd موجود (3.91 ميجا)"
         fi
         if [ -f "$CLANG_PATH/arm-linux-gnueabi-ld.bfd" ]; then
-          echo "✅ arm-linux-gnueabi-ld.bfd موجود"
+          echo "✅ arm-linux-gnueabi-ld.bfd موجود (2.00 ميجا)"
         fi
         if [ -f "$CLANG_PATH/ld.bfd" ]; then
-          echo "✅ ld.bfd موجود"
+          echo "✅ ld.bfd موجود (2.70 ميجا)"
         fi
         
         echo "📋 محتويات مجلد Gonon Clang (مختصر):"
@@ -174,8 +174,18 @@ jobs:
         echo "OBJDUMP=$CLANG_PATH/llvm-objdump" >> $GITHUB_ENV
         echo "STRIP=$CLANG_PATH/llvm-strip" >> $GITHUB_ENV
         
-        # ⭐⭐ إضافة: استخدام ld.bfd العام ⭐⭐
-        echo "LD=$CLANG_PATH/ld.bfd" >> $GITHUB_ENV
+        # ⭐⭐ إضافة: استخدام aarch64-linux-gnu-ld.bfd للنواة 64-bit ⭐⭐
+        if [ -f "$CLANG_PATH/aarch64-linux-gnu-ld.bfd" ]; then
+          echo "LD=$CLANG_PATH/aarch64-linux-gnu-ld.bfd" >> $GITHUB_ENV
+          echo "✅ استخدام aarch64-linux-gnu-ld.bfd للنواة 64-bit"
+        elif [ -f "$CLANG_PATH/ld.bfd" ]; then
+          echo "LD=$CLANG_PATH/ld.bfd" >> $GITHUB_ENV
+          echo "⚠️  استخدام ld.bfd العام (قد يسبب مشاكل)"
+        else
+          echo "LD=aarch64-linux-gnu-ld.bfd" >> $GITHUB_ENV
+          echo "❌ استخدام الافتراضي"
+        fi
+        
         echo "LDFLAGS=-fuse-ld=bfd" >> $GITHUB_ENV
         
         # إضافة إلى PATH
