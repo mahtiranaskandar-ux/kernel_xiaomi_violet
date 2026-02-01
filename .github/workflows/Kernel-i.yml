@@ -343,24 +343,6 @@ jobs:
           echo "✅ تم نسخ dtbo.img"
         fi
         
-        # إضافة معلومات البناء
-        cat > AK3/build_info.txt << EOF
-Kernel Build Information
-=======================
-Build Date: $(date)
-Build Toolchain: Gonon Clang 18
-Clang Version: $($CLANG_PATH/clang --version | head -1)
-Builder: GitHub Actions
-Branch: genon
-Features: KernelSu-Next-legacy, susfs-V2.0.0
-LLVM Tools Used:
-- AR: $(basename "$AR")
-- NM: $(basename "$NM")
-- OBJCOPY: $(basename "$OBJCOPY")
-- STRIP: $(basename "$STRIP")
-- LD: $(basename "$LD")
-EOF
-        
         cd AK3
         zip -r9 ../Kernel-violet-gonon-llvm.zip *
         cd ..
