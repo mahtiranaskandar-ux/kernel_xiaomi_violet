@@ -40,7 +40,7 @@ jobs:
         echo "📥 تحميل AOSP Clang..."
         
         # ⭐⭐ رابط AOSP Clang ⭐⭐
-        AOSP_CLANG_URL="https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/refs/tags/android-platform-15.0.0_r13/clang-r522817.tar.gz"
+        AOSP_CLANG_URL="https://android.googlesource.com/platform//prebuilts/clang/host/linux-x86/+archive/refs/tags/android-platform-15.0.0_r13/clang-r498229b.tar.gz"
         
         wget -q "$AOSP_CLANG_URL" -O aosp-clang.tar.gz
         
