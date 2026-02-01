@@ -33,27 +33,144 @@ jobs:
           ccache \
           zstd
 
-    # 3️⃣ WeebX Clang 19.1.5 ⭐⭐ معدل ليكون مثل Bash ⭐⭐
+    # 3️⃣ WeebX Clang 19.1.5 مع الكشف التلقائي ⭐⭐ مثل ZyCromerZ ⭐⭐
     - name: Setup WeebX Clang 19.1.5
       id: setup_clang
       run: |
         echo "📥 تحميل WeebX Clang 19.1.5..."
-        wget -q "https://github.com/XSans0/WeebX-Clang/releases/download/WeebX-Clang-19.1.5-release/WeebX-Clang-19.1.5.tar.gz" -O weebx-clang.tar.gz
         
+        # ⭐⭐ رابط WeebX Clang ⭐⭐
+        WEEBX_CLANG_URL="https://github.com/XSans0/WeebX-Clang/releases/download/WeebX-Clang-19.1.5-release/WeebX-Clang-19.1.5.tar.gz"
+        
+        wget -q "$WEEBX_CLANG_URL" -O weebx-clang.tar.gz
+        
+        echo "📦 فك الضغط..."
         mkdir -p weebx-clang
         tar -xzf weebx-clang.tar.gz -C weebx-clang --strip-components=1
         
+        rm -f weebx-clang.tar.gz
+        
         CLANG_PATH="$PWD/weebx-clang/bin"
         
-        # ⭐⭐ مثل Bash: إضافة إلى PATH فقط ⭐⭐
+        # ⭐⭐ الكشف التلقائي عن إصدار WeebX Clang ⭐⭐
+        echo "🔍 الكشف التلقائي عن WeebX Clang..."
+        
+        # البحث عن أي clang-* في WeebX Clang
+        CLANG_BIN=$(find "$CLANG_PATH" -name "clang-[0-9]*" -type f | head -1)
+        
+        if [ -z "$CLANG_BIN" ]; then
+          # محاولة أخرى: البحث عن أي ملف يبدأ بـ clang
+          CLANG_BIN=$(find "$CLANG_PATH" -name "clang*" -type f ! -name "*.so" ! -name "*.dll" ! -name "clang++*" | head -1)
+        fi
+        
+        if [ -z "$CLANG_BIN" ]; then
+          echo "❌ لم يتم العثور على clang في $CLANG_PATH"
+          echo "📋 محتويات مجلد WeebX Clang:"
+          ls -la "$CLANG_PATH/" | head -30
+          exit 1
+        fi
+        
+        CLANG_BASENAME=$(basename "$CLANG_BIN")
+        echo "✅ وجد WeebX Clang: $CLANG_BASENAME"
+        
+        # ⭐⭐ إنشاء رابط رمزي clang ⭐⭐
+        if [ ! -L "$CLANG_PATH/clang" ] && [ ! -f "$CLANG_PATH/clang" ]; then
+          echo "🔗 إنشاء رابط رمزي: clang -> $CLANG_BASENAME"
+          ln -sf "$CLANG_BASENAME" "$CLANG_PATH/clang"
+        fi
+        
+        # ⭐⭐ البحث عن clang++ المقابل ⭐⭐
+        # محاولة 1: استبدال clang بـ clang++
+        CLANGPP_PATTERN1=$(echo "$CLANG_BASENAME" | sed 's/^clang/clang++/')
+        # محاولة 2: إضافة ++ للنهاية
+        CLANGPP_PATTERN2="${CLANG_BASENAME}++"
+        
+        CLANGPP_BIN=""
+        if [ -f "$CLANG_PATH/$CLANGPP_PATTERN1" ]; then
+          CLANGPP_BIN="$CLANG_PATH/$CLANGPP_PATTERN1"
+        elif [ -f "$CLANG_PATH/$CLANGPP_PATTERN2" ]; then
+          CLANGPP_BIN="$CLANG_PATH/$CLANGPP_PATTERN2"
+        else
+          # البحث عن أي clang++
+          CLANGPP_BIN=$(find "$CLANG_PATH" -name "clang++*" -type f | head -1)
+        fi
+        
+        if [ -n "$CLANGPP_BIN" ]; then
+          CLANGPP_BASENAME=$(basename "$CLANGPP_BIN")
+          echo "✅ وجد Clang++: $CLANGPP_BASENAME"
+          
+          if [ ! -L "$CLANG_PATH/clang++" ] && [ ! -f "$CLANG_PATH/clang++" ]; then
+            echo "🔗 إنشاء رابط رمزي: clang++ -> $CLANGPP_BASENAME"
+            ln -sf "$CLANGPP_BASENAME" "$CLANG_PATH/clang++"
+          fi
+        else
+          echo "⚠️  لم يتم العثور على clang++ في WeebX Clang"
+        fi
+        
+        # التحقق من أدوات LLVM الأساسية
+        echo "🔧 التحقق من أدوات LLVM في WeebX Clang..."
+        REQUIRED_TOOLS="llvm-ar llvm-nm llvm-objcopy llvm-objdump llvm-strip"
+        for tool in $REQUIRED_TOOLS; do
+          if [ -f "$CLANG_PATH/$tool" ]; then
+            echo "✅ $tool موجود"
+          else
+            echo "⚠️  $tool غير موجود - قد يسبب مشاكل"
+          fi
+        done
+        
+        echo "📋 محتويات مجلد WeebX Clang (مختصر):"
+        ls -la "$CLANG_PATH/" | grep -E "^l.*clang|^[^d].*(clang|llvm)" | head -15 2>/dev/null || true
+        
+        # إضافة إلى PATH
         echo "$CLANG_PATH" >> $GITHUB_PATH
         
-        # حفظ المسار للاستخدام لاحقاً
+        # حفظ معلومات Clang للمراحل التالية
         echo "CLANG_PATH=$CLANG_PATH" >> $GITHUB_ENV
+        echo "CLANG_BIN_NAME=$CLANG_BASENAME" >> $GITHUB_ENV
         
-        echo "✅ WeebX Clang 19.1.5 جاهز!"
+        echo "🎯 WeebX Clang 19.1.5 جاهز! ($CLANG_BASENAME)"
 
-    # 4️⃣ Export env 
+    # 🆕 التحقق التلقائي من WeebX Clang
+    - name: Verify WeebX Clang Auto-Detection
+      run: |
+        echo "🔍 التحقق التلقائي من WeebX Clang..."
+        
+        echo "📋 معلومات WeebX Clang المكتشف:"
+        echo "CLANG_PATH: $CLANG_PATH"
+        echo "CLANG_BIN_NAME: $CLANG_BIN_NAME"
+        
+        echo "🔎 البحث عن clang في PATH:"
+        which clang || { echo "❌ clang غير موجود في PATH"; exit 1; }
+        
+        CLANG_ACTUAL=$(which clang)
+        echo "✅ clang موجود في: $CLANG_ACTUAL"
+        
+        # التحقق من الرابط الرمزي
+        if [ -L "$CLANG_ACTUAL" ]; then
+          REAL_CLANG=$(readlink -f "$CLANG_ACTUAL")
+          echo "🔗 clang هو رابط رمزي إلى: $REAL_CLANG"
+          
+          if [ -f "$REAL_CLANG" ]; then
+            echo "✅ الملف الحقيقي موجود"
+            echo "📊 حجم الملف: $(ls -lh "$REAL_CLANG" | awk '{print $5}')"
+          else
+            echo "❌ الملف الحقيقي غير موجود!"
+            exit 1
+          fi
+        fi
+        
+        echo "📊 معلومات WeebX Clang:"
+        clang --version | head -5
+        
+        # التحقق من الإصدار المحدد
+        if [ -n "$CLANG_BIN_NAME" ]; then
+          echo "🔍 التحقق من الإصدار المحدد ($CLANG_BIN_NAME):"
+          "$CLANG_PATH/$CLANG_BIN_NAME" --version | head -3
+        fi
+        
+        echo "✅ التحقق التلقائي من WeebX Clang اكتمل!"
+
+    # 4️⃣ Export env
     - name: Export env
       run: |
         echo "ARCH=arm64" >> $GITHUB_ENV
@@ -68,7 +185,7 @@ jobs:
       run: |
         make O=out vendor/violet-perf_defconfig
 
-    # 6️⃣ Build kernel ⭐⭐ مطابق لـ Bash تماماً ⭐⭐
+    # 6️⃣ Build kernel مع التحقق التلقائي
     - name: Build kernel
       shell: bash
       env:
@@ -78,20 +195,26 @@ jobs:
       run: |
         set -o pipefail
         mkdir -p logs
+        
         ccache -M 1G
         ccache -z
         
-        echo "🚀 بدء بناء النواة..."
-        echo "🔧 Clang المستخدم: $(which clang)"
-        echo "🔧 Clang الإصدار:"
-        clang --version | head -2
+        echo "🚀 بدء بناء النواة باستخدام WeebX Clang..."
+        
+        # التحقق النهائي التلقائي
+        echo "🔍 التحقق النهائي التلقائي:"
+        echo "🔧 WeebX Clang المستخدم: $(which clang)"
+        echo "🔧 المسار الحقيقي: $(readlink -f $(which clang) 2>/dev/null || which clang)"
+        echo "🔧 الإصدار المكتشف: $CLANG_BIN_NAME"
+        
+        echo "📋 معلومات WeebX Clang النهائية:"
+        clang --version | head -3
         
         echo "🔧 CROSS_COMPILE: $CROSS_COMPILE"
         echo "🔧 CROSS_COMPILE_ARM32: $CROSS_COMPILE_ARM32"
         echo "🔧 CLANG_TRIPLE: $CLANG_TRIPLE"
         
-        # ⭐⭐ مثل Bash تماماً: استخدام "ccache clang" ⭐⭐
-        # ⭐⭐ بدون مسافات بعد \ ⭐⭐
+        # البناء باستخدام WeebX Clang المكتشف تلقائياً
         stdbuf -oL -eL make O=out -j$(nproc) \
         CC="ccache clang" \
         CLANG_TRIPLE="$CLANG_TRIPLE" \
@@ -101,10 +224,13 @@ jobs:
         LLVM_IAS=1 \
         2>&1 | tee logs/build.log
         
+        BUILD_STATUS=${PIPESTATUS[0]}
+        
         ccache -s
         
-        if [ -f "out/arch/arm64/boot/Image.gz" ]; then
-            echo "✅ تم بناء النواة بنجاح!"
+        if [ $BUILD_STATUS -eq 0 ] && [ -f "out/arch/arm64/boot/Image.gz" ]; then
+            echo "✅ تم بناء النواة بنجاح باستخدام WeebX $CLANG_BIN_NAME!"
+            ls -lh out/arch/arm64/boot/Image.gz
         else
             echo "❌ فشل بناء النواة!"
             exit 1
@@ -134,24 +260,30 @@ jobs:
         
         cd AK3
         zip -r9 ../Kernel-violet-weebx-clang.zip *
-        echo "✅ تم إنشاء Kernel-violet-weebx-clang.zip"
+        cd ..
+        
+        echo "📏 حجم ZIP:"
+        ls -lh Kernel-violet-weebx-clang.zip
+        echo "✅ تم إنشاء ZIP"
     
     # 9️⃣ Sign ZIP
     - name: Sign zip
       run: |
-        echo "🖊️ توقيع ملف ZIP..."
+        echo "🖊️ توقيع ZIP..."
         wget -q -O zipsigner.jar https://github.com/Magisk-Modules-Repo/zipsigner/raw/master/bin/zipsigner-3.0-dexed.jar
         java -jar zipsigner.jar Kernel-violet-weebx-clang.zip Kernel-violet-weebx-clang-signed.zip
-        echo "✅ تم التوقيع: Kernel-violet-weebx-clang-signed.zip"
+        
+        echo "📏 حجم ZIP الموقّع:"
+        ls -lh Kernel-violet-weebx-clang-signed.zip
+        echo "✅ تم التوقيع"
     
-    # 🔟 رفع ملف ZIP
+    # 🔟 رفع ZIP
     - name: Upload Kernel ZIP
       if: always()
       uses: actions/upload-artifact@v4
       with:
         name: Kernel-WeebX-Clang-ZIP
-        path: |
-          Kernel-violet-weebx-clang-signed.zip
+        path: Kernel-violet-weebx-clang-signed.zip
     
     # 1️⃣1️⃣ رفع اللوغات والتحليلات
     - name: Upload Logs and Analysis
@@ -164,3 +296,18 @@ jobs:
           nm-ksu.txt
           nm-susfs.txt
           nm-full.txt
+
+    # ملخص البناء
+    - name: Build Summary
+      if: always()
+      run: |
+        echo "📊 ملخص البناء باستخدام WeebX Clang:"
+        echo "================================"
+        echo "🔧 WeebX Clang المستخدم: $CLANG_BIN_NAME"
+        echo "📁 مسار Clang: $CLANG_PATH"
+        echo ""
+        echo "✅ ملفات تم إنشاؤها:"
+        ls -lh Kernel-violet-weebx-clang-signed.zip 2>/dev/null || echo "❌ ZIP غير موجود"
+        ls -lh logs/build.log 2>/dev/null || echo "❌ اللوغ غير موجود"
+        ls -lh nm-*.txt 2>/dev/null || echo "❌ ملفات التحليل غير موجودة"
+        echo "================================"
