@@ -5,7 +5,6 @@ on:
   push:
     branches:
       - genon
-
 jobs:
   build:
     runs-on: ubuntu-24.04
@@ -47,18 +46,21 @@ jobs:
         echo "📊 المساحة المتاحة:"
         df -h
 
-    # 3️⃣ Gonon Clang 18 مع اختيار ld.bfd الصحيح
-    - name: Setup Gonon Clang with correct ld.bfd
+    # 3️⃣ Gonon Clang 18 مع الكشف التلقائي ⭐⭐
+    - name: Setup Gonon Clang
       id: setup_clang
       run: |
         echo "📥 تحميل Gonon Clang 18..."
         
+        # ⭐⭐ رابط Gonon Clang الجديد ⭐⭐
         GONON_URL="https://github.com/Gonon-Kernel/gonon-clang/releases/download/18.0.0git-20240105-release/GononClang-18.0.0git-20240105.tar.gz"
         
         wget -q "$GONON_URL" -O gonon-clang.tar.gz
         
+        # التحقق من التحميل
         if [ ! -f "gonon-clang.tar.gz" ]; then
           echo "❌ فشل تحميل Gonon Clang!"
+          echo "🔗 الرابط: $GONON_URL"
           exit 1
         fi
         
@@ -66,99 +68,163 @@ jobs:
         mkdir -p gonon-clang
         tar -xf gonon-clang.tar.gz -C gonon-clang
         
-        # البحث عن مجلد bin
-        BIN_DIR=$(find "$PWD/gonon-clang" -name "bin" -type d | head -1)
-        if [ -n "$BIN_DIR" ]; then
-          CLANG_PATH="$BIN_DIR"
-          echo "✅ وجد bin في: $CLANG_PATH"
+        # التحقق من فك الضغط
+        if [ ! -d "gonon-clang/bin" ]; then
+          echo "⚠️  بنية مجلد مختلفة، البحث عن bin..."
+          # البحث عن مجلد bin في أي مكان
+          BIN_DIR=$(find "$PWD/gonon-clang" -name "bin" -type d | head -1)
+          if [ -n "$BIN_DIR" ]; then
+            echo "✅ وجد bin في: $BIN_DIR"
+            CLANG_PATH="$BIN_DIR"
+          else
+            echo "❌ لم يتم العثور على مجلد bin في Gonon Clang!"
+            ls -la "$PWD/gonon-clang/"
+            exit 1
+          fi
         else
-          echo "❌ لم يتم العثور على مجلد bin!"
-          exit 1
+          CLANG_PATH="$PWD/gonon-clang/bin"
         fi
         
         rm -f gonon-clang.tar.gz
         
-        # الكشف عن clang
-        echo "🔍 الكشف عن clang..."
+        # ⭐⭐ الكشف التلقائي عن إصدار Gonon Clang ⭐⭐
+        echo "🔍 الكشف التلقائي عن Gonon Clang..."
+        
+        # البحث عن clang-* في Gonon Clang
         CLANG_BIN=$(find "$CLANG_PATH" -name "clang-[0-9]*" -type f | head -1)
+        
         if [ -z "$CLANG_BIN" ]; then
-          CLANG_BIN=$(find "$CLANG_PATH" -name "clang" -type f | head -1)
+          # محاولة أخرى: البحث عن clang بدون رقم
+          CLANG_BIN=$(find "$CLANG_PATH" -name "clang" -type f ! -name "*.so" ! -name "*.dll" | head -1)
         fi
         
         if [ -z "$CLANG_BIN" ]; then
-          echo "❌ لم يتم العثور على clang!"
+          echo "❌ لم يتم العثور على clang في $CLANG_PATH"
+          echo "📋 محتويات مجلد Gonon Clang:"
+          ls -la "$CLANG_PATH/" | head -30
           exit 1
         fi
         
         CLANG_BASENAME=$(basename "$CLANG_BIN")
-        echo "✅ وجد clang: $CLANG_BASENAME"
+        echo "✅ وجد Gonon Clang: $CLANG_BASENAME"
         
-        # إنشاء روابط رمزية
-        if [ "$CLANG_BASENAME" != "clang" ] && [ ! -L "$CLANG_PATH/clang" ]; then
+        # ⭐⭐ إنشاء رابط رمزي clang إذا لزم الأمر ⭐⭐
+        if [ "$CLANG_BASENAME" != "clang" ] && [ ! -L "$CLANG_PATH/clang" ] && [ ! -f "$CLANG_PATH/clang" ]; then
+          echo "🔗 إنشاء رابط رمزي: clang -> $CLANG_BASENAME"
           ln -sf "$CLANG_BASENAME" "$CLANG_PATH/clang"
-          echo "🔗 clang -> $CLANG_BASENAME"
         fi
         
-        if [ ! -L "$CLANG_PATH/clang++" ]; then
-          CLANGPP_BIN=$(find "$CLANG_PATH" -name "clang++-[0-9]*" -type f | head -1)
-          if [ -n "$CLANGPP_BIN" ]; then
-            ln -sf "$(basename "$CLANGPP_BIN")" "$CLANG_PATH/clang++"
-            echo "🔗 clang++ -> $(basename "$CLANGPP_BIN")"
-          else
+        # ⭐⭐ البحث عن clang++ المقابل ⭐⭐
+        CLANGPP_PATTERN=$(echo "$CLANG_BASENAME" | sed 's/^clang/clang++/')
+        CLANGPP_BIN=$(find "$CLANG_PATH" -name "$CLANGPP_PATTERN" -type f | head -1)
+        
+        if [ -z "$CLANGPP_BIN" ]; then
+          # البحث عن أي clang++
+          CLANGPP_BIN=$(find "$CLANG_PATH" -name "clang++*" -type f | head -1)
+        fi
+        
+        if [ -z "$CLANGPP_BIN" ]; then
+          # إذا clang++ غير موجود، إنشائه من clang
+          if [ ! -L "$CLANG_PATH/clang++" ] && [ ! -f "$CLANG_PATH/clang++" ]; then
+            echo "🔗 إنشاء رابط رمزي: clang++ -> clang"
             ln -sf "clang" "$CLANG_PATH/clang++"
-            echo "🔗 clang++ -> clang"
+          fi
+          CLANGPP_BASENAME="clang"
+        else
+          CLANGPP_BASENAME=$(basename "$CLANGPP_BIN")
+          echo "✅ وجد Clang++: $CLANGPP_BASENAME"
+          
+          if [ ! -L "$CLANG_PATH/clang++" ] && [ ! -f "$CLANG_PATH/clang++" ]; then
+            echo "🔗 إنشاء رابط رمزي: clang++ -> $CLANGPP_BASENAME"
+            ln -sf "$CLANGPP_BASENAME" "$CLANG_PATH/clang++"
           fi
         fi
         
-        # ⭐⭐ اختيار ld.bfd المناسب ⭐⭐
-        echo ""
-        echo "🔍 اختيار أداة الربط المناسبة..."
+        # التحقق من أدوات LLVM الأساسية
+        echo "🔧 التحقق من أدوات LLVM في Gonon Clang..."
+        REQUIRED_TOOLS="llvm-ar llvm-nm llvm-objcopy llvm-objdump llvm-strip"
+        for tool in $REQUIRED_TOOLS; do
+          if [ -f "$CLANG_PATH/$tool" ]; then
+            echo "✅ $tool موجود"
+          else
+            echo "⚠️  $tool غير موجود - قد يسبب مشاكل"
+          fi
+        done
         
-        # استخدام aarch64-linux-gnu-ld.bfd للأفضل (3.19 ميجا)
+        # ⭐⭐ البحث عن ld.bfd ⭐⭐
+        echo "🔍 البحث عن ld.bfd..."
         if [ -f "$CLANG_PATH/aarch64-linux-gnu-ld.bfd" ]; then
-          LD_MAIN="$CLANG_PATH/aarch64-linux-gnu-ld.bfd"
-          echo "✅ اختيار: aarch64-linux-gnu-ld.bfd (3.19 ميجا) - الأفضل للنواة 64-bit"
+          LD_BFD="$CLANG_PATH/aarch64-linux-gnu-ld.bfd"
+          echo "✅ وجد aarch64-linux-gnu-ld.bfd"
         elif [ -f "$CLANG_PATH/ld.bfd" ]; then
-          LD_MAIN="$CLANG_PATH/ld.bfd"
-          echo "⚠️  اختيار: ld.bfd (2.70 ميجا) - بديل"
+          LD_BFD="$CLANG_PATH/ld.bfd"
+          echo "✅ وجد ld.bfd"
         else
-          echo "❌ لم يتم العثور على ld.bfd!"
-          exit 1
+          echo "⚠️  ld.bfd غير موجود"
+          LD_BFD="ld.bfd"
         fi
         
-        # ⭐⭐ تعيين جميع متغيرات LLVM المطلوبة ⭐⭐
-        echo ""
-        echo "🔧 تعيين متغيرات LLVM كما في التعليمات..."
+        echo "📋 محتويات مجلد Gonon Clang (مختصر):"
+        ls -la "$CLANG_PATH/" | grep -E "^l.*clang|^[^d].*(clang|llvm|ld)" | head -15 2>/dev/null || true
         
-        # حفظ المعلومات الأساسية
-        echo "CLANG_PATH=$CLANG_PATH" >> $GITHUB_ENV
-        echo "CLANG_BIN_NAME=$CLANG_BASENAME" >> $GITHUB_ENV
-        
-        # 1. المترجمات
-        echo "CC=$CLANG_PATH/clang" >> $GITHUB_ENV
-        echo "HOSTCC=$CLANG_PATH/clang" >> $GITHUB_ENV
-        echo "HOSTCXX=$CLANG_PATH/clang++" >> $GITHUB_ENV
-        
-        # 2. ⭐⭐ أدوات LLVM المطلوبة (AR, NM, OBJCOPY, OBJDUMP, STRIP) ⭐⭐
+        # ⭐⭐ تعيين متغيرات LLVM المطلوبة ⭐⭐
+        echo "🔧 تعيين متغيرات LLVM..."
         echo "AR=$CLANG_PATH/llvm-ar" >> $GITHUB_ENV
         echo "NM=$CLANG_PATH/llvm-nm" >> $GITHUB_ENV
         echo "OBJCOPY=$CLANG_PATH/llvm-objcopy" >> $GITHUB_ENV
         echo "OBJDUMP=$CLANG_PATH/llvm-objdump" >> $GITHUB_ENV
         echo "STRIP=$CLANG_PATH/llvm-strip" >> $GITHUB_ENV
-        
-        # 3. ⭐⭐ أداة الربط ld.bfd ⭐⭐
-        echo "LD=$LD_MAIN" >> $GITHUB_ENV
-        echo "CROSS_COMPILE_LD=$LD_MAIN" >> $GITHUB_ENV
-        
-        # 4. إعدادات الربط
+        echo "LD=$LD_BFD" >> $GITHUB_ENV
         echo "LDFLAGS=-fuse-ld=bfd" >> $GITHUB_ENV
-        echo "KBUILD_LDFLAGS=-fuse-ld=bfd" >> $GITHUB_ENV
         
-        # 5. إضافة إلى PATH
+        # إضافة إلى PATH
         echo "$CLANG_PATH" >> $GITHUB_PATH
         
-        echo ""
-        echo "🎯 Gonon Clang جاهز مع جميع متغيرات LLVM!"
+        # حفظ معلومات Clang للمراحل التالية
+        echo "CLANG_PATH=$CLANG_PATH" >> $GITHUB_ENV
+        echo "CLANG_BIN_NAME=$CLANG_BASENAME" >> $GITHUB_ENV
+        
+        echo "🎯 Gonon Clang 18 جاهز! ($CLANG_BASENAME)"
+
+    # 🆕 التحقق التلقائي من Gonon Clang
+    - name: Verify Gonon Clang Auto-Detection
+      run: |
+        echo "🔍 التحقق التلقائي من Gonon Clang..."
+        
+        echo "📋 معلومات Gonon Clang المكتشف:"
+        echo "CLANG_PATH: $CLANG_PATH"
+        echo "CLANG_BIN_NAME: $CLANG_BIN_NAME"
+        
+        echo "🔎 البحث عن clang في PATH:"
+        which clang || { echo "❌ clang غير موجود في PATH"; exit 1; }
+        
+        CLANG_ACTUAL=$(which clang)
+        echo "✅ clang موجود في: $CLANG_ACTUAL"
+        
+        # التحقق من الرابط الرمزي
+        if [ -L "$CLANG_ACTUAL" ]; then
+          REAL_CLANG=$(readlink -f "$CLANG_ACTUAL")
+          echo "🔗 clang هو رابط رمزي إلى: $REAL_CLANG"
+          
+          if [ -f "$REAL_CLANG" ]; then
+            echo "✅ الملف الحقيقي موجود"
+            echo "📊 حجم الملف: $(ls -lh "$REAL_CLANG" | awk '{print $5}')"
+          else
+            echo "❌ الملف الحقيقي غير موجود!"
+            exit 1
+          fi
+        fi
+        
+        echo "📊 معلومات Gonon Clang:"
+        clang --version | head -5
+        
+        # التحقق من الإصدار المحدد
+        if [ -n "$CLANG_BIN_NAME" ]; then
+          echo "🔍 التحقق من الإصدار المحدد ($CLANG_BIN_NAME):"
+          "$CLANG_PATH/$CLANG_BIN_NAME" --version | head -3
+        fi
+        
+        echo "✅ التحقق التلقائي من Gonon Clang اكتمل!"
 
     # 4️⃣ Export env
     - name: Export env
@@ -169,146 +235,83 @@ jobs:
         echo "CROSS_COMPILE_ARM32=arm-linux-gnueabi-" >> $GITHUB_ENV
         echo "CLANG_TRIPLE=aarch64-linux-gnu-" >> $GITHUB_ENV
         echo "CCACHE_DIR=$HOME/.ccache" >> $GITHUB_ENV
-        echo "USE_CCACHE=1" >> $GITHUB_ENV
-        echo "LLVM=1" >> $GITHUB_ENV
-        echo "LLVM_IAS=1" >> $GITHUB_ENV
 
     # 5️⃣ Defconfig
     - name: Load defconfig
       run: |
-        echo "⚙️ تحميل defconfig..."
         make O=out vendor/violet-perf_defconfig
 
-    # 6️⃣ Build kernel مع جميع متغيرات LLVM
-    - name: Build kernel with all LLVM variables
+    # 6️⃣ Build kernel مع التحقق التلقائي
+    - name: Build kernel
       shell: bash
       env:
-        # ⭐⭐ متغيرات LLVM من Gonon Clang ⭐⭐
-        CC: ${{ env.CC }}
-        HOSTCC: ${{ env.HOSTCC }}
-        HOSTCXX: ${{ env.HOSTCXX }}
+        CROSS_COMPILE: aarch64-linux-gnu-
+        CROSS_COMPILE_ARM32: arm-linux-gnueabi-
+        CLANG_TRIPLE: aarch64-linux-gnu-
+        # ⭐⭐ متغيرات LLVM المضافة ⭐⭐
         AR: ${{ env.AR }}
         NM: ${{ env.NM }}
         OBJCOPY: ${{ env.OBJCOPY }}
         OBJDUMP: ${{ env.OBJDUMP }}
         STRIP: ${{ env.STRIP }}
-        # ⭐⭐ أداة الربط ld.bfd ⭐⭐
         LD: ${{ env.LD }}
-        CROSS_COMPILE_LD: ${{ env.CROSS_COMPILE_LD }}
-        LDFLAGS: ${{ env.LDFLAGS || '-fuse-ld=bfd' }}
-        # إعدادات البناء
-        CROSS_COMPILE: aarch64-linux-gnu-
-        CROSS_COMPILE_ARM32: arm-linux-gnueabi-
-        CLANG_TRIPLE: aarch64-linux-gnu-
-        LLVM: 1
-        LLVM_IAS: 1
+        LDFLAGS: ${{ env.LDFLAGS }}
       run: |
         set -o pipefail
         mkdir -p logs
         
-        ccache -M 2G
+        ccache -M 1G
         ccache -z
         
-        echo "🚀 بدء بناء النواة مع جميع متغيرات LLVM..."
-        echo "=========================================="
+        echo "🚀 بدء بناء النواة باستخدام Gonon Clang 18..."
         
-        # التحقق من جميع الأدوات
-        echo "🔍 التحقق من أدوات LLVM:"
-        echo ""
+        # التحقق النهائي التلقائي
+        echo "🔍 التحقق النهائي التلقائي:"
+        echo "🔧 Gonon Clang المستخدم: $(which clang)"
+        echo "🔧 المسار الحقيقي: $(readlink -f $(which clang) 2>/dev/null || which clang)"
+        echo "🔧 الإصدار المكتشف: $CLANG_BIN_NAME"
         
-        TOOLS=(
-          "CC:$CC"
-          "HOSTCC:$HOSTCC" 
-          "HOSTCXX:$HOSTCXX"
-          "AR:$AR"
-          "NM:$NM"
-          "OBJCOPY:$OBJCOPY"
-          "STRIP:$STRIP"
-          "LD:$LD"
-        )
+        echo "📋 معلومات Gonon Clang النهائية:"
+        clang --version | head -3
         
-        for tool_info in "${TOOLS[@]}"; do
-          tool_name="${tool_info%%:*}"
-          tool_path="${tool_info##*:}"
-          
-          if [ -n "$tool_path" ] && [ -x "$tool_path" ]; then
-            echo "✅ $tool_name: $(basename "$tool_path")"
-            echo "   📍 $tool_path"
-          else
-            echo "❌ $tool_name: غير صالح ($tool_path)"
-          fi
-        done
+        echo "🔧 CROSS_COMPILE: $CROSS_COMPILE"
+        echo "🔧 CROSS_COMPILE_ARM32: $CROSS_COMPILE_ARM32"
+        echo "🔧 CLANG_TRIPLE: $CLANG_TRIPLE"
         
-        # تحقق خاص من ld.bfd
-        echo ""
-        echo "🔗 تحقق من أداة الربط:"
-        if [ -f "$LD" ]; then
-          echo "✅ LD: $(basename "$LD")"
-          echo "   📊 حجم: $(ls -lh "$LD" | awk '{print $5}')"
-          echo "   📍 مسار: $LD"
-        else
-          echo "❌ ملف LD غير موجود: $LD"
-        fi
-        
-        echo ""
-        echo "🔧 إعدادات البناء النهائية:"
-        echo "=========================="
-        echo "CC: ccache clang"
-        echo "AR: $(basename "$AR")"
-        echo "NM: $(basename "$NM")" 
-        echo "OBJCOPY: $(basename "$OBJCOPY")"
-        echo "STRIP: $(basename "$STRIP")"
-        echo "LD: $(basename "$LD") ⭐"
+        echo "🔧 أدوات LLVM المستخدمة:"
+        echo "AR: $AR"
+        echo "NM: $NM"
+        echo "OBJCOPY: $OBJCOPY"
+        echo "STRIP: $STRIP"
+        echo "LD: $LD"
         echo "LDFLAGS: $LDFLAGS"
-        echo "CROSS_COMPILE: $CROSS_COMPILE"
-        echo "LLVM: $LLVM"
-        echo "LLVM_IAS: $LLVM_IAS"
-        echo "=========================="
         
-        echo ""
-        echo "🔨 بدء عملية البناء..."
-        echo "=========================================="
-        
-        # ⭐⭐ البناء مع جميع متغيرات LLVM ⭐⭐
+        # البناء باستخدام Gonon Clang المكتشف تلقائياً
         stdbuf -oL -eL make O=out -j$(nproc) \
         CC="ccache clang" \
-        HOSTCC="$HOSTCC" \
-        HOSTCXX="$HOSTCXX" \
         AR="$AR" \
         NM="$NM" \
         OBJCOPY="$OBJCOPY" \
         OBJDUMP="$OBJDUMP" \
         STRIP="$STRIP" \
         LD="$LD" \
-        CROSS_COMPILE_LD="$CROSS_COMPILE_LD" \
         LDFLAGS="$LDFLAGS" \
         CLANG_TRIPLE="$CLANG_TRIPLE" \
         CROSS_COMPILE="$CROSS_COMPILE" \
         CROSS_COMPILE_ARM32="$CROSS_COMPILE_ARM32" \
-        LLVM="$LLVM" \
-        LLVM_IAS="$LLVM_IAS" \
+        LLVM=1 \
+        LLVM_IAS=1 \
         2>&1 | tee logs/build.log
         
         BUILD_STATUS=${PIPESTATUS[0]}
         
-        echo ""
-        echo "📊 إحصائيات ccache:"
         ccache -s
         
         if [ $BUILD_STATUS -eq 0 ] && [ -f "out/arch/arm64/boot/Image.gz" ]; then
-            echo ""
-            echo "✅ ✅ ✅ تم بناء النواة بنجاح! ✅ ✅ ✅"
-            echo ""
-            echo "📁 الملف الناتج:"
+            echo "✅ تم بناء النواة بنجاح باستخدام Gonon $CLANG_BIN_NAME!"
             ls -lh out/arch/arm64/boot/Image.gz
-            [ -f "out/arch/arm64/boot/dtbo.img" ] && ls -lh out/arch/arm64/boot/dtbo.img
-            echo ""
-            echo "🎉 البناء اكتمل باستخدام جميع أدوات LLVM!"
         else
-            echo ""
             echo "❌ فشل بناء النواة!"
-            echo "🔍 الأخطاء الأخيرة:"
-            tail -100 logs/build.log | grep -i "error\|undefined" | head -20 || tail -50 logs/build.log
             exit 1
         fi
 
@@ -317,67 +320,56 @@ jobs:
       run: |
         echo "🔍 تحليل الرموز..."
         if [ -f "out/vmlinux" ]; then
-            echo "🔎 البحث عن رموز KSU..."
-            nm out/vmlinux | grep -E "ksu_|kernelsu" > nm-ksu.txt 2>/dev/null || echo "⚠️  لم يتم العثور على رموز KSU" > nm-ksu.txt
-            
-            echo "🔎 البحث عن رموز susfs..."
-            nm out/vmlinux | grep -i susfs > nm-susfs.txt 2>/dev/null || echo "⚠️  لم يتم العثور على رموز susfs" > nm-susfs.txt
-            
-            echo "📝 جمع جميع الرموز..."
-            nm out/vmlinux > nm-full.txt 2>/dev/null || echo "❌ فشل جمع الرموز" > nm-full.txt
-            
+            nm out/vmlinux | grep -E "ksu_|kernelsu" > nm-ksu.txt || echo "⚠️  لم يتم العثور على رموز KSU"
+            nm out/vmlinux | grep -i susfs > nm-susfs.txt || echo "⚠️  لم يتم العثور على رموز susfs"
+            nm out/vmlinux > nm-full.txt
             echo "✅ تم إنشاء ملفات التحليل"
         else
             echo "❌ ملف vmlinux غير موجود"
         fi
     
-    # 8️⃣ AnyKernel3
+    # 8️⃣ AnyKernel3 (تعديل الاسم)
     - name: Package AnyKernel3
       run: |
         echo "📦 تعبئة AnyKernel3..."
         git clone --depth=1 -b sixteen https://github.com/Joker-V2/AnyKernel3.git AK3
         cp out/arch/arm64/boot/Image.gz AK3/
         
-        if [ -f "out/arch/arm64/boot/dtbo.img" ]; then
-          cp out/arch/arm64/boot/dtbo.img AK3/
-          echo "✅ تم نسخ dtbo.img"
-        fi
+        [ -f "out/arch/arm64/boot/dtbo.img" ] && cp out/arch/arm64/boot/dtbo.img AK3/
         
         cd AK3
-        zip -r9 ../Kernel-violet-gonon-llvm.zip *
+        zip -r9 ../Kernel-violet-gonon-clang-18.zip *
         cd ..
         
         echo "📏 حجم ZIP:"
-        ls -lh Kernel-violet-gonon-llvm.zip
+        ls -lh Kernel-violet-gonon-clang-18.zip
         echo "✅ تم إنشاء ZIP"
-
-    # 9️⃣ Sign ZIP
+    
+    # 9️⃣ Sign ZIP (تعديل الاسم)
     - name: Sign zip
       run: |
         echo "🖊️ توقيع ZIP..."
         wget -q -O zipsigner.jar https://github.com/Magisk-Modules-Repo/zipsigner/raw/master/bin/zipsigner-3.0-dexed.jar
-        java -jar zipsigner.jar Kernel-violet-gonon-llvm.zip Kernel-violet-gonon-llvm-signed.zip
+        java -jar zipsigner.jar Kernel-violet-gonon-clang-18.zip Kernel-violet-gonon-clang-18-signed.zip
         
         echo "📏 حجم ZIP الموقّع:"
-        ls -lh Kernel-violet-gonon-llvm-signed.zip
+        ls -lh Kernel-violet-gonon-clang-18-signed.zip
         echo "✅ تم التوقيع"
-
+    
     # 🔟 رفع ZIP
     - name: Upload Kernel ZIP
       if: always()
       uses: actions/upload-artifact@v4
       with:
-        name: Kernel-Gonon-LLVM
-        path: |
-          Kernel-violet-gonon-llvm-signed.zip
-          build_info.txt
-
+        name: Kernel-Gonon-Clang-18-ZIP
+        path: Kernel-violet-gonon-clang-18-signed.zip
+    
     # 1️⃣1️⃣ رفع اللوغات والتحليلات
     - name: Upload Logs and Analysis
       if: always()
       uses: actions/upload-artifact@v4
       with:
-        name: Build-Logs-Analysis
+        name: Build-Logs-Analysis-Gonon
         path: |
           logs/build.log
           nm-ksu.txt
@@ -388,29 +380,20 @@ jobs:
     - name: Build Summary
       if: always()
       run: |
-        echo "📊 📊 📊 ملخص البناء 📊 📊 📊"
-        echo "=========================================="
-        echo "🎯 Gonon Clang 18 مع LLVM Tools"
-        echo "=========================================="
+        echo "📊 ملخص البناء باستخدام Gonon Clang 18:"
+        echo "================================"
+        echo "🔧 Gonon Clang المستخدم: $CLANG_BIN_NAME"
+        echo "📁 مسار Clang: $CLANG_PATH"
         echo ""
-        echo "🔧 الأدوات المستخدمة:"
-        echo "  • Clang: $CLANG_BIN_NAME"
-        echo "  • AR: $(basename "$AR" 2>/dev/null || echo 'N/A')"
-        echo "  • NM: $(basename "$NM" 2>/dev/null || echo 'N/A')"
-        echo "  • OBJCOPY: $(basename "$OBJCOPY" 2>/dev/null || echo 'N/A')"
-        echo "  • STRIP: $(basename "$STRIP" 2>/dev/null || echo 'N/A')"
-        echo "  • LD: $(basename "$LD" 2>/dev/null || echo 'N/A') ⭐"
+        echo "🛠️ أدوات LLVM المستخدمة:"
+        echo "AR: $(basename $AR 2>/dev/null || echo 'N/A')"
+        echo "NM: $(basename $NM 2>/dev/null || echo 'N/A')"
+        echo "OBJCOPY: $(basename $OBJCOPY 2>/dev/null || echo 'N/A')"
+        echo "STRIP: $(basename $STRIP 2>/dev/null || echo 'N/A')"
+        echo "LD: $(basename $LD 2>/dev/null || echo 'N/A')"
         echo ""
-        echo "✅ المخرجات:"
-        if [ -f "Kernel-violet-gonon-llvm-signed.zip" ]; then
-          echo "  • Kernel ZIP: $(ls -lh Kernel-violet-gonon-llvm-signed.zip | awk '{print $5}')"
-        else
-          echo "  • Kernel ZIP: ❌ غير موجود"
-        fi
-        echo ""
-        echo "📁 التحليلات:"
-        ls -lh nm-*.txt 2>/dev/null | wc -l | xargs echo "  • عدد ملفات التحليل:"
-        echo ""
-        echo "=========================================="
-        echo "🎉 العملية اكتملت!"
-        echo "=========================================="
+        echo "✅ ملفات تم إنشاؤها:"
+        ls -lh Kernel-violet-gonon-clang-18-signed.zip 2>/dev/null || echo "❌ ZIP غير موجود"
+        ls -lh logs/build.log 2>/dev/null || echo "❌ اللوغ غير موجود"
+        ls -lh nm-*.txt 2>/dev/null || echo "❌ ملفات التحليل غير موجودة"
+        echo "================================"
