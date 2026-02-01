@@ -48,13 +48,13 @@ jobs:
         echo "📊 المساحة المتاحة:"
         df -h
 
-    # 3️⃣ Neutron Clang مع الكشف التلقائي ⭐⭐ مثل ZyCromerZ ⭐⭐
+    # 3️⃣ Neutron Clang مع الكشف التلقائي
     - name: Setup Neutron Clang
       id: setup_clang
       run: |
         echo "📥 تحميل Neutron Clang..."
         
-        # ⭐⭐ رابط Neutron Clang ⭐⭐
+        # رابط Neutron Clang
         NEUTRON_URL="https://github.com/Neutron-Toolchains/clang-build-catalogue/releases/download/10032024/neutron-clang-10032024.tar.zst"
         
         wget -q "$NEUTRON_URL" -O neutron-clang.tar.zst
@@ -64,10 +64,10 @@ jobs:
         
         rm -f neutron-clang.tar.zst
         
-        # ⭐⭐ Neutron Clang مختلف: الملفات في bin/ مباشرة ⭐⭐
+        # Neutron Clang مختلف: الملفات في bin/ مباشرة
         CLANG_PATH="$PWD/bin"
         
-        # ⭐⭐ الكشف التلقائي عن إصدار Neutron Clang ⭐⭐
+        # الكشف التلقائي عن إصدار Neutron Clang
         echo "🔍 الكشف التلقائي عن Neutron Clang..."
         
         # البحث عن clang-* في Neutron Clang
@@ -88,14 +88,13 @@ jobs:
         CLANG_BASENAME=$(basename "$CLANG_BIN")
         echo "✅ وجد Neutron Clang: $CLANG_BASENAME"
         
-        # ⭐⭐ Neutron Clang قد يحتوي على clang مباشرة (بدون رقم) ⭐⭐
-        # التحقق مما إذا كان clang موجوداً أصلاً
+        # إنشاء رابط رمزي clang إذا لم يكن موجوداً
         if [ ! -f "$CLANG_PATH/clang" ] && [ ! -L "$CLANG_PATH/clang" ]; then
           echo "🔗 إنشاء رابط رمزي: clang -> $CLANG_BASENAME"
           ln -sf "$CLANG_BASENAME" "$CLANG_PATH/clang"
         fi
         
-        # ⭐⭐ البحث عن clang++ المقابل ⭐⭐
+        # البحث عن clang++ المقابل
         CLANGPP_PATTERN=$(echo "$CLANG_BASENAME" | sed 's/^clang/clang++/')
         CLANGPP_BIN=$(find "$CLANG_PATH" -name "$CLANGPP_PATTERN" -type f | head -1)
         
@@ -194,7 +193,7 @@ jobs:
       run: |
         make O=out vendor/violet-perf_defconfig
 
-    # 6️⃣ Build kernel ⭐⭐ مطابق لـ Bash الأصلية ⭐⭐
+    # 6️⃣ Build kernel مع LLVM=1 و LLVM_IAS=1 ⭐⭐ تم التحديث ⭐⭐
     - name: Build kernel
       shell: bash
       env:
@@ -205,8 +204,6 @@ jobs:
         set -o pipefail
         mkdir -p logs
         
-        # ⭐⭐ Neutron Clang في Bash الأصلية لا يستخدم ccache ⭐⭐
-        # لكننا نضيفه للسرعة مع الاحتفاظ بالمطابقة
         ccache -M 1G
         ccache -z
         
@@ -225,7 +222,7 @@ jobs:
         echo "🔧 CROSS_COMPILE_ARM32: $CROSS_COMPILE_ARM32"
         echo "🔧 CLANG_TRIPLE: $CLANG_TRIPLE"
         
-        # ⭐⭐ البناء مثل Bash الأصلية ولكن مع ccache ⭐⭐
+        # ⭐⭐ البناء مع LLVM=1 و LLVM_IAS=1 ⭐⭐
         stdbuf -oL -eL make O=out -j$(nproc) \
         CC="ccache clang" \
         AR="llvm-ar" \
@@ -236,6 +233,8 @@ jobs:
         CLANG_TRIPLE="$CLANG_TRIPLE" \
         CROSS_COMPILE="$CROSS_COMPILE" \
         CROSS_COMPILE_ARM32="$CROSS_COMPILE_ARM32" \
+        LLVM=1 \
+        LLVM_IAS=1 \
         2>&1 | tee logs/build.log
         
         BUILD_STATUS=${PIPESTATUS[0]}
