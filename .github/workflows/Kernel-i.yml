@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
   push:
     branches:
-      - test7
+      - xweeb
 jobs:
   build:
     runs-on: ubuntu-24.04
@@ -14,7 +14,7 @@ jobs:
     - name: Checkout source
       uses: actions/checkout@v4
       with:
-        ref: test7
+        ref: xweeb
         fetch-depth: 1
 
     # 2️⃣ Dependencies
@@ -33,26 +33,25 @@ jobs:
           ccache \
           zstd
 
-    # 3️⃣ AOSP Clang
-    - name: Setup AOSP Clang
+    # 3️⃣ WeebX Clang 19.1.5 ⭐⭐ معدل ليكون مثل Bash ⭐⭐
+    - name: Setup WeebX Clang 19.1.5
+      id: setup_clang
       run: |
-        echo "📥 تحميل AOSP Clang..."
-        wget -q "https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/refs/tags/android-platform-15.0.0_r13/clang-r522817.tar.gz" -O aosp-clang.tar.gz
+        echo "📥 تحميل WeebX Clang 19.1.5..."
+        wget -q "https://github.com/XSans0/WeebX-Clang/releases/download/WeebX-Clang-19.1.5-release/WeebX-Clang-19.1.5.tar.gz" -O weebx-clang.tar.gz
         
-        mkdir -p aosp-clang
-        tar -xf aosp-clang.tar.gz -C aosp-clang
+        mkdir -p weebx-clang
+        tar -xzf weebx-clang.tar.gz -C weebx-clang --strip-components=1
         
-        CLANG_PATH="$PWD/aosp-clang/bin"
+        CLANG_PATH="$PWD/weebx-clang/bin"
         
-        echo "CC=$CLANG_PATH/clang-18" >> $GITHUB_ENV
-        echo "AR=$CLANG_PATH/llvm-ar" >> $GITHUB_ENV
-        echo "NM=$CLANG_PATH/llvm-nm" >> $GITHUB_ENV
-        echo "OBJCOPY=$CLANG_PATH/llvm-objcopy" >> $GITHUB_ENV
-        echo "OBJDUMP=$CLANG_PATH/llvm-objdump" >> $GITHUB_ENV
-        echo "STRIP=$CLANG_PATH/llvm-strip" >> $GITHUB_ENV
-        
+        # ⭐⭐ مثل Bash: إضافة إلى PATH فقط ⭐⭐
         echo "$CLANG_PATH" >> $GITHUB_PATH
-        echo "✅ AOSP Clang جاهز!"
+        
+        # حفظ المسار للاستخدام لاحقاً
+        echo "CLANG_PATH=$CLANG_PATH" >> $GITHUB_ENV
+        
+        echo "✅ WeebX Clang 19.1.5 جاهز!"
 
     # 4️⃣ Export env 
     - name: Export env
@@ -69,16 +68,12 @@ jobs:
       run: |
         make O=out vendor/violet-perf_defconfig
 
-    # 6️⃣ Build kernel
+    # 6️⃣ Build kernel ⭐⭐ مطابق لـ Bash تماماً ⭐⭐
     - name: Build kernel
       shell: bash
       env:
-        CC: ${{ env.CC }}
-        AR: ${{ env.AR }}
-        NM: ${{ env.NM }}
-        OBJCOPY: ${{ env.OBJCOPY }}
-        OBJDUMP: ${{ env.OBJDUMP }}
-        STRIP: ${{ env.STRIP }}
+        CROSS_COMPILE: aarch64-linux-gnu-
+        CROSS_COMPILE_ARM32: arm-linux-gnueabi-
         CLANG_TRIPLE: aarch64-linux-gnu-
       run: |
         set -o pipefail
@@ -87,22 +82,24 @@ jobs:
         ccache -z
         
         echo "🚀 بدء بناء النواة..."
-        echo "🔧 CC: $CC"
-        echo "🔧 AR: $AR"
-        echo "🔧 NM: $NM"
+        echo "🔧 Clang المستخدم: $(which clang)"
+        echo "🔧 Clang الإصدار:"
+        clang --version | head -2
+        
+        echo "🔧 CROSS_COMPILE: $CROSS_COMPILE"
+        echo "🔧 CROSS_COMPILE_ARM32: $CROSS_COMPILE_ARM32"
         echo "🔧 CLANG_TRIPLE: $CLANG_TRIPLE"
         
-        $CC --version | head -2
-        
+        # ⭐⭐ مثل Bash تماماً: استخدام "ccache clang" ⭐⭐
+        # ⭐⭐ بدون مسافات بعد \ ⭐⭐
         stdbuf -oL -eL make O=out -j$(nproc) \
-          CC="ccache $CC" \
-          AR="$AR" \
-          NM="$NM" \
-          OBJCOPY="$OBJCOPY" \
-          OBJDUMP="$OBJDUMP" \
-          STRIP="$STRIP" \
-          CLANG_TRIPLE="$CLANG_TRIPLE" \
-          2>&1 | tee logs/build.log
+        CC="ccache clang" \
+        CLANG_TRIPLE="$CLANG_TRIPLE" \
+        CROSS_COMPILE="$CROSS_COMPILE" \
+        CROSS_COMPILE_ARM32="$CROSS_COMPILE_ARM32" \
+        LLVM=1 \
+        LLVM_IAS=1 \
+        2>&1 | tee logs/build.log
         
         ccache -s
         
@@ -136,32 +133,32 @@ jobs:
         [ -f "out/arch/arm64/boot/dtbo.img" ] && cp out/arch/arm64/boot/dtbo.img AK3/
         
         cd AK3
-        zip -r9 ../Kernel-violet-aosp.zip *
-        echo "✅ تم إنشاء Kernel-violet-aosp.zip"
+        zip -r9 ../Kernel-violet-weebx-clang.zip *
+        echo "✅ تم إنشاء Kernel-violet-weebx-clang.zip"
     
     # 9️⃣ Sign ZIP
     - name: Sign zip
       run: |
         echo "🖊️ توقيع ملف ZIP..."
         wget -q -O zipsigner.jar https://github.com/Magisk-Modules-Repo/zipsigner/raw/master/bin/zipsigner-3.0-dexed.jar
-        java -jar zipsigner.jar Kernel-violet-aosp.zip Kernel-violet-aosp-signed.zip
-        echo "✅ تم التوقيع: Kernel-violet-aosp-signed.zip"
+        java -jar zipsigner.jar Kernel-violet-weebx-clang.zip Kernel-violet-weebx-clang-signed.zip
+        echo "✅ تم التوقيع: Kernel-violet-weebx-clang-signed.zip"
     
     # 🔟 رفع ملف ZIP
     - name: Upload Kernel ZIP
       if: always()
       uses: actions/upload-artifact@v4
       with:
-        name: Kernel-ZIP
+        name: Kernel-WeebX-Clang-ZIP
         path: |
-          Kernel-violet-aosp-signed.zip
+          Kernel-violet-weebx-clang-signed.zip
     
     # 1️⃣1️⃣ رفع اللوغات والتحليلات
     - name: Upload Logs and Analysis
       if: always()
       uses: actions/upload-artifact@v4
       with:
-        name: Build-Logs-Analysis
+        name: Build-Logs-Analysis-WeebX
         path: |
           logs/build.log
           nm-ksu.txt
