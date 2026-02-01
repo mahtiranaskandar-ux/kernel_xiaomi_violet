@@ -4,8 +4,7 @@ on:
   workflow_dispatch:
   push:
     branches:
-      - test6
-
+      - genon
 jobs:
   build:
     runs-on: ubuntu-24.04
@@ -15,7 +14,7 @@ jobs:
     - name: Checkout source
       uses: actions/checkout@v4
       with:
-        ref: test6
+        ref: genon
         fetch-depth: 1
 
     # 2️⃣ Dependencies
@@ -32,7 +31,6 @@ jobs:
           python3 \
           openjdk-17-jre-headless \
           ccache \
-          zstd \
           zstd
 
     # 🆕 تحرير مساحة القرص
@@ -48,53 +46,75 @@ jobs:
         echo "📊 المساحة المتاحة:"
         df -h
 
-    # 3️⃣ Neutron Clang مع الكشف التلقائي
-    - name: Setup Neutron Clang
+    # 3️⃣ Gonon Clang 18 مع الكشف التلقائي ⭐⭐
+    - name: Setup Gonon Clang
       id: setup_clang
       run: |
-        echo "📥 تحميل Neutron Clang..."
+        echo "📥 تحميل Gonon Clang 18..."
         
-        # رابط Neutron Clang
-        NEUTRON_URL="https://github.com/Neutron-Toolchains/clang-build-catalogue/releases/download/10032024/neutron-clang-10032024.tar.zst"
+        # ⭐⭐ رابط Gonon Clang الجديد ⭐⭐
+        GONON_URL="https://github.com/Gonon-Kernel/gonon-clang/releases/download/18.0.0git-20240105-release/GononClang-18.0.0git-20240105.tar.gz"
         
-        wget -q "$NEUTRON_URL" -O neutron-clang.tar.zst
+        wget -q "$GONON_URL" -O gonon-clang.tar.gz
         
-        echo "📦 فك الضغط (zstd)..."
-        tar -I zstd -xf neutron-clang.tar.zst
+        # التحقق من التحميل
+        if [ ! -f "gonon-clang.tar.gz" ]; then
+          echo "❌ فشل تحميل Gonon Clang!"
+          echo "🔗 الرابط: $GONON_URL"
+          exit 1
+        fi
         
-        rm -f neutron-clang.tar.zst
+        echo "📦 فك الضغط..."
+        mkdir -p gonon-clang
+        tar -xf gonon-clang.tar.gz -C gonon-clang
         
-        # Neutron Clang مختلف: الملفات في bin/ مباشرة
-        CLANG_PATH="$PWD/bin"
+        # التحقق من فك الضغط
+        if [ ! -d "gonon-clang/bin" ]; then
+          echo "⚠️  بنية مجلد مختلفة، البحث عن bin..."
+          # البحث عن مجلد bin في أي مكان
+          BIN_DIR=$(find "$PWD/gonon-clang" -name "bin" -type d | head -1)
+          if [ -n "$BIN_DIR" ]; then
+            echo "✅ وجد bin في: $BIN_DIR"
+            CLANG_PATH="$BIN_DIR"
+          else
+            echo "❌ لم يتم العثور على مجلد bin في Gonon Clang!"
+            ls -la "$PWD/gonon-clang/"
+            exit 1
+          fi
+        else
+          CLANG_PATH="$PWD/gonon-clang/bin"
+        fi
         
-        # الكشف التلقائي عن إصدار Neutron Clang
-        echo "🔍 الكشف التلقائي عن Neutron Clang..."
+        rm -f gonon-clang.tar.gz
         
-        # البحث عن clang-* في Neutron Clang
+        # ⭐⭐ الكشف التلقائي عن إصدار Gonon Clang ⭐⭐
+        echo "🔍 الكشف التلقائي عن Gonon Clang..."
+        
+        # البحث عن clang-* في Gonon Clang
         CLANG_BIN=$(find "$CLANG_PATH" -name "clang-[0-9]*" -type f | head -1)
         
         if [ -z "$CLANG_BIN" ]; then
-          # محاولة أخرى: البحث عن أي clang
-          CLANG_BIN=$(find "$CLANG_PATH" -name "clang*" -type f ! -name "*.so" ! -name "*.dll" ! -name "clang++*" | head -1)
+          # محاولة أخرى: البحث عن clang بدون رقم
+          CLANG_BIN=$(find "$CLANG_PATH" -name "clang" -type f ! -name "*.so" ! -name "*.dll" | head -1)
         fi
         
         if [ -z "$CLANG_BIN" ]; then
           echo "❌ لم يتم العثور على clang في $CLANG_PATH"
-          echo "📋 محتويات مجلد Neutron Clang:"
+          echo "📋 محتويات مجلد Gonon Clang:"
           ls -la "$CLANG_PATH/" | head -30
           exit 1
         fi
         
         CLANG_BASENAME=$(basename "$CLANG_BIN")
-        echo "✅ وجد Neutron Clang: $CLANG_BASENAME"
+        echo "✅ وجد Gonon Clang: $CLANG_BASENAME"
         
-        # إنشاء رابط رمزي clang إذا لم يكن موجوداً
-        if [ ! -f "$CLANG_PATH/clang" ] && [ ! -L "$CLANG_PATH/clang" ]; then
+        # ⭐⭐ إنشاء رابط رمزي clang إذا لزم الأمر ⭐⭐
+        if [ "$CLANG_BASENAME" != "clang" ] && [ ! -L "$CLANG_PATH/clang" ] && [ ! -f "$CLANG_PATH/clang" ]; then
           echo "🔗 إنشاء رابط رمزي: clang -> $CLANG_BASENAME"
           ln -sf "$CLANG_BASENAME" "$CLANG_PATH/clang"
         fi
         
-        # البحث عن clang++ المقابل
+        # ⭐⭐ البحث عن clang++ المقابل ⭐⭐
         CLANGPP_PATTERN=$(echo "$CLANG_BASENAME" | sed 's/^clang/clang++/')
         CLANGPP_BIN=$(find "$CLANG_PATH" -name "$CLANGPP_PATTERN" -type f | head -1)
         
@@ -103,7 +123,14 @@ jobs:
           CLANGPP_BIN=$(find "$CLANG_PATH" -name "clang++*" -type f | head -1)
         fi
         
-        if [ -n "$CLANGPP_BIN" ]; then
+        if [ -z "$CLANGPP_BIN" ]; then
+          # إذا clang++ غير موجود، إنشائه من clang
+          if [ ! -L "$CLANG_PATH/clang++" ] && [ ! -f "$CLANG_PATH/clang++" ]; then
+            echo "🔗 إنشاء رابط رمزي: clang++ -> clang"
+            ln -sf "clang" "$CLANG_PATH/clang++"
+          fi
+          CLANGPP_BASENAME="clang"
+        else
           CLANGPP_BASENAME=$(basename "$CLANGPP_BIN")
           echo "✅ وجد Clang++: $CLANGPP_BASENAME"
           
@@ -111,12 +138,10 @@ jobs:
             echo "🔗 إنشاء رابط رمزي: clang++ -> $CLANGPP_BASENAME"
             ln -sf "$CLANGPP_BASENAME" "$CLANG_PATH/clang++"
           fi
-        else
-          echo "⚠️  لم يتم العثور على clang++ في Neutron Clang"
         fi
         
         # التحقق من أدوات LLVM الأساسية
-        echo "🔧 التحقق من أدوات LLVM في Neutron Clang..."
+        echo "🔧 التحقق من أدوات LLVM في Gonon Clang..."
         REQUIRED_TOOLS="llvm-ar llvm-nm llvm-objcopy llvm-objdump llvm-strip"
         for tool in $REQUIRED_TOOLS; do
           if [ -f "$CLANG_PATH/$tool" ]; then
@@ -126,7 +151,7 @@ jobs:
           fi
         done
         
-        echo "📋 محتويات مجلد Neutron Clang (مختصر):"
+        echo "📋 محتويات مجلد Gonon Clang (مختصر):"
         ls -la "$CLANG_PATH/" | grep -E "^l.*clang|^[^d].*(clang|llvm)" | head -15 2>/dev/null || true
         
         # إضافة إلى PATH
@@ -136,14 +161,14 @@ jobs:
         echo "CLANG_PATH=$CLANG_PATH" >> $GITHUB_ENV
         echo "CLANG_BIN_NAME=$CLANG_BASENAME" >> $GITHUB_ENV
         
-        echo "🎯 Neutron Clang جاهز! ($CLANG_BASENAME)"
+        echo "🎯 Gonon Clang 18 جاهز! ($CLANG_BASENAME)"
 
-    # 🆕 التحقق التلقائي من Neutron Clang
-    - name: Verify Neutron Clang Auto-Detection
+    # 🆕 التحقق التلقائي من Gonon Clang
+    - name: Verify Gonon Clang Auto-Detection
       run: |
-        echo "🔍 التحقق التلقائي من Neutron Clang..."
+        echo "🔍 التحقق التلقائي من Gonon Clang..."
         
-        echo "📋 معلومات Neutron Clang المكتشف:"
+        echo "📋 معلومات Gonon Clang المكتشف:"
         echo "CLANG_PATH: $CLANG_PATH"
         echo "CLANG_BIN_NAME: $CLANG_BIN_NAME"
         
@@ -167,7 +192,7 @@ jobs:
           fi
         fi
         
-        echo "📊 معلومات Neutron Clang:"
+        echo "📊 معلومات Gonon Clang:"
         clang --version | head -5
         
         # التحقق من الإصدار المحدد
@@ -176,7 +201,7 @@ jobs:
           "$CLANG_PATH/$CLANG_BIN_NAME" --version | head -3
         fi
         
-        echo "✅ التحقق التلقائي من Neutron Clang اكتمل!"
+        echo "✅ التحقق التلقائي من Gonon Clang اكتمل!"
 
     # 4️⃣ Export env
     - name: Export env
@@ -193,7 +218,7 @@ jobs:
       run: |
         make O=out vendor/violet-perf_defconfig
 
-    # 6️⃣ Build kernel مع LLVM=1 و LLVM_IAS=1 ⭐⭐ تم التحديث ⭐⭐
+    # 6️⃣ Build kernel مع التحقق التلقائي
     - name: Build kernel
       shell: bash
       env:
@@ -207,29 +232,24 @@ jobs:
         ccache -M 1G
         ccache -z
         
-        echo "🚀 بدء بناء النواة باستخدام Neutron Clang..."
+        echo "🚀 بدء بناء النواة باستخدام Gonon Clang 18..."
         
-        # التحقق النهائي
-        echo "🔍 التحقق النهائي:"
-        echo "🔧 Neutron Clang المستخدم: $(which clang)"
+        # التحقق النهائي التلقائي
+        echo "🔍 التحقق النهائي التلقائي:"
+        echo "🔧 Gonon Clang المستخدم: $(which clang)"
         echo "🔧 المسار الحقيقي: $(readlink -f $(which clang) 2>/dev/null || which clang)"
         echo "🔧 الإصدار المكتشف: $CLANG_BIN_NAME"
         
-        echo "📋 معلومات Neutron Clang:"
+        echo "📋 معلومات Gonon Clang النهائية:"
         clang --version | head -3
         
         echo "🔧 CROSS_COMPILE: $CROSS_COMPILE"
         echo "🔧 CROSS_COMPILE_ARM32: $CROSS_COMPILE_ARM32"
         echo "🔧 CLANG_TRIPLE: $CLANG_TRIPLE"
         
-        # ⭐⭐ البناء مع LLVM=1 و LLVM_IAS=1 ⭐⭐
+        # البناء باستخدام Gonon Clang المكتشف تلقائياً
         stdbuf -oL -eL make O=out -j$(nproc) \
         CC="ccache clang" \
-        AR="llvm-ar" \
-        NM="llvm-nm" \
-        OBJCOPY="llvm-objcopy" \
-        OBJDUMP="llvm-objdump" \
-        STRIP="llvm-strip" \
         CLANG_TRIPLE="$CLANG_TRIPLE" \
         CROSS_COMPILE="$CROSS_COMPILE" \
         CROSS_COMPILE_ARM32="$CROSS_COMPILE_ARM32" \
@@ -242,7 +262,7 @@ jobs:
         ccache -s
         
         if [ $BUILD_STATUS -eq 0 ] && [ -f "out/arch/arm64/boot/Image.gz" ]; then
-            echo "✅ تم بناء النواة بنجاح باستخدام Neutron $CLANG_BIN_NAME!"
+            echo "✅ تم بناء النواة بنجاح باستخدام Gonon $CLANG_BIN_NAME!"
             ls -lh out/arch/arm64/boot/Image.gz
         else
             echo "❌ فشل بناء النواة!"
@@ -262,7 +282,7 @@ jobs:
             echo "❌ ملف vmlinux غير موجود"
         fi
     
-    # 8️⃣ AnyKernel3
+    # 8️⃣ AnyKernel3 (تعديل الاسم)
     - name: Package AnyKernel3
       run: |
         echo "📦 تعبئة AnyKernel3..."
@@ -272,22 +292,22 @@ jobs:
         [ -f "out/arch/arm64/boot/dtbo.img" ] && cp out/arch/arm64/boot/dtbo.img AK3/
         
         cd AK3
-        zip -r9 ../Kernel-violet-neutron.zip *
+        zip -r9 ../Kernel-violet-gonon-clang-18.zip *
         cd ..
         
         echo "📏 حجم ZIP:"
-        ls -lh Kernel-violet-neutron.zip
+        ls -lh Kernel-violet-gonon-clang-18.zip
         echo "✅ تم إنشاء ZIP"
     
-    # 9️⃣ Sign ZIP
+    # 9️⃣ Sign ZIP (تعديل الاسم)
     - name: Sign zip
       run: |
         echo "🖊️ توقيع ZIP..."
         wget -q -O zipsigner.jar https://github.com/Magisk-Modules-Repo/zipsigner/raw/master/bin/zipsigner-3.0-dexed.jar
-        java -jar zipsigner.jar Kernel-violet-neutron.zip Kernel-violet-neutron-signed.zip
+        java -jar zipsigner.jar Kernel-violet-gonon-clang-18.zip Kernel-violet-gonon-clang-18-signed.zip
         
         echo "📏 حجم ZIP الموقّع:"
-        ls -lh Kernel-violet-neutron-signed.zip
+        ls -lh Kernel-violet-gonon-clang-18-signed.zip
         echo "✅ تم التوقيع"
     
     # 🔟 رفع ZIP
@@ -295,15 +315,15 @@ jobs:
       if: always()
       uses: actions/upload-artifact@v4
       with:
-        name: Kernel-Neutron-Clang-ZIP
-        path: Kernel-violet-neutron-signed.zip
+        name: Kernel-Gonon-Clang-18-ZIP
+        path: Kernel-violet-gonon-clang-18-signed.zip
     
     # 1️⃣1️⃣ رفع اللوغات والتحليلات
     - name: Upload Logs and Analysis
       if: always()
       uses: actions/upload-artifact@v4
       with:
-        name: Build-Logs-Analysis-Neutron
+        name: Build-Logs-Analysis-Gonon
         path: |
           logs/build.log
           nm-ksu.txt
@@ -314,13 +334,13 @@ jobs:
     - name: Build Summary
       if: always()
       run: |
-        echo "📊 ملخص البناء باستخدام Neutron Clang:"
+        echo "📊 ملخص البناء باستخدام Gonon Clang 18:"
         echo "================================"
-        echo "🔧 Neutron Clang المستخدم: $CLANG_BIN_NAME"
+        echo "🔧 Gonon Clang المستخدم: $CLANG_BIN_NAME"
         echo "📁 مسار Clang: $CLANG_PATH"
         echo ""
         echo "✅ ملفات تم إنشاؤها:"
-        ls -lh Kernel-violet-neutron-signed.zip 2>/dev/null || echo "❌ ZIP غير موجود"
+        ls -lh Kernel-violet-gonon-clang-18-signed.zip 2>/dev/null || echo "❌ ZIP غير موجود"
         ls -lh logs/build.log 2>/dev/null || echo "❌ اللوغ غير موجود"
         ls -lh nm-*.txt 2>/dev/null || echo "❌ ملفات التحليل غير موجودة"
         echo "================================"
