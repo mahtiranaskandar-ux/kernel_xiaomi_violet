@@ -151,42 +151,8 @@ jobs:
           fi
         done
         
-        # ⭐⭐ إضافة: البحث عن أدوات ld.bfd ⭐⭐
-        echo "🔍 البحث عن أدوات ld.bfd..."
-        if [ -f "$CLANG_PATH/aarch64-linux-gnu-ld.bfd" ]; then
-          echo "✅ aarch64-linux-gnu-ld.bfd موجود (3.91 ميجا)"
-        fi
-        if [ -f "$CLANG_PATH/arm-linux-gnueabi-ld.bfd" ]; then
-          echo "✅ arm-linux-gnueabi-ld.bfd موجود (2.00 ميجا)"
-        fi
-        if [ -f "$CLANG_PATH/ld.bfd" ]; then
-          echo "✅ ld.bfd موجود (2.70 ميجا)"
-        fi
-        
         echo "📋 محتويات مجلد Gonon Clang (مختصر):"
-        ls -la "$CLANG_PATH/" | grep -E "^l.*clang|^[^d].*(clang|llvm|ld)" | head -15 2>/dev/null || true
-        
-        # ⭐⭐ إضافة: تعيين متغيرات LLVM ⭐⭐
-        echo "🔧 تعيين متغيرات LLVM..."
-        echo "AR=$CLANG_PATH/llvm-ar" >> $GITHUB_ENV
-        echo "NM=$CLANG_PATH/llvm-nm" >> $GITHUB_ENV
-        echo "OBJCOPY=$CLANG_PATH/llvm-objcopy" >> $GITHUB_ENV
-        echo "OBJDUMP=$CLANG_PATH/llvm-objdump" >> $GITHUB_ENV
-        echo "STRIP=$CLANG_PATH/llvm-strip" >> $GITHUB_ENV
-        
-        # ⭐⭐ إضافة: استخدام aarch64-linux-gnu-ld.bfd للنواة 64-bit ⭐⭐
-        if [ -f "$CLANG_PATH/aarch64-linux-gnu-ld.bfd" ]; then
-          echo "LD=$CLANG_PATH/aarch64-linux-gnu-ld.bfd" >> $GITHUB_ENV
-          echo "✅ استخدام aarch64-linux-gnu-ld.bfd للنواة 64-bit"
-        elif [ -f "$CLANG_PATH/ld.bfd" ]; then
-          echo "LD=$CLANG_PATH/ld.bfd" >> $GITHUB_ENV
-          echo "⚠️  استخدام ld.bfd العام (قد يسبب مشاكل)"
-        else
-          echo "LD=aarch64-linux-gnu-ld.bfd" >> $GITHUB_ENV
-          echo "❌ استخدام الافتراضي"
-        fi
-        
-        echo "LDFLAGS=-fuse-ld=bfd" >> $GITHUB_ENV
+        ls -la "$CLANG_PATH/" | grep -E "^l.*clang|^[^d].*(clang|llvm)" | head -15 2>/dev/null || true
         
         # إضافة إلى PATH
         echo "$CLANG_PATH" >> $GITHUB_PATH
@@ -259,14 +225,6 @@ jobs:
         CROSS_COMPILE: aarch64-linux-gnu-
         CROSS_COMPILE_ARM32: arm-linux-gnueabi-
         CLANG_TRIPLE: aarch64-linux-gnu-
-        # ⭐⭐ إضافة: متغيرات LLVM ⭐⭐
-        AR: ${{ env.AR }}
-        NM: ${{ env.NM }}
-        OBJCOPY: ${{ env.OBJCOPY }}
-        OBJDUMP: ${{ env.OBJDUMP }}
-        STRIP: ${{ env.STRIP }}
-        LD: ${{ env.LD }}
-        LDFLAGS: ${{ env.LDFLAGS }}
       run: |
         set -o pipefail
         mkdir -p logs
@@ -289,26 +247,9 @@ jobs:
         echo "🔧 CROSS_COMPILE_ARM32: $CROSS_COMPILE_ARM32"
         echo "🔧 CLANG_TRIPLE: $CLANG_TRIPLE"
         
-        # ⭐⭐ إضافة: عرض أدوات LLVM ⭐⭐
-        echo "🔧 أدوات LLVM المستخدمة:"
-        echo "AR: $AR"
-        echo "NM: $NM"
-        echo "OBJCOPY: $OBJCOPY"
-        echo "STRIP: $STRIP"
-        echo "LD: $LD"
-        echo "LDFLAGS: $LDFLAGS"
-        
         # البناء باستخدام Gonon Clang المكتشف تلقائياً
-        # ⭐⭐ إضافة: استخدام متغيرات LLVM في make ⭐⭐
         stdbuf -oL -eL make O=out -j$(nproc) \
         CC="ccache clang" \
-        AR="$AR" \
-        NM="$NM" \
-        OBJCOPY="$OBJCOPY" \
-        OBJDUMP="$OBJDUMP" \
-        STRIP="$STRIP" \
-        LD="$LD" \
-        LDFLAGS="$LDFLAGS" \
         CLANG_TRIPLE="$CLANG_TRIPLE" \
         CROSS_COMPILE="$CROSS_COMPILE" \
         CROSS_COMPILE_ARM32="$CROSS_COMPILE_ARM32" \
@@ -397,14 +338,6 @@ jobs:
         echo "================================"
         echo "🔧 Gonon Clang المستخدم: $CLANG_BIN_NAME"
         echo "📁 مسار Clang: $CLANG_PATH"
-        echo ""
-        # ⭐⭐ إضافة: عرض أدوات LLVM المستخدمة ⭐⭐
-        echo "🛠️ أدوات LLVM المستخدمة:"
-        echo "AR: $(basename $AR 2>/dev/null || echo 'N/A')"
-        echo "NM: $(basename $NM 2>/dev/null || echo 'N/A')"
-        echo "OBJCOPY: $(basename $OBJCOPY 2>/dev/null || echo 'N/A')"
-        echo "STRIP: $(basename $STRIP 2>/dev/null || echo 'N/A')"
-        echo "LD: $(basename $LD 2>/dev/null || echo 'N/A')"
         echo ""
         echo "✅ ملفات تم إنشاؤها:"
         ls -lh Kernel-violet-gonon-clang-18-signed.zip 2>/dev/null || echo "❌ ZIP غير موجود"
