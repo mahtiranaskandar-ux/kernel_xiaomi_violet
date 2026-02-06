@@ -1,0 +1,35 @@
+name: Cleanup 5 Oldest Cancelled Runs
+
+on:
+  workflow_dispatch: # تشغيل يدوياً
+
+jobs:
+  delete-cancelled-runs:
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+
+    steps:
+      - name: 🗑️ Delete Oldest 5 Cancelled Runs
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          echo "جاري البحث عن أقدم 5 سجلات ملغاة (Cancelled)..."
+          
+          # الفلتر يستخدم --status cancelled لجلب الملغاة فقط
+          # ثم tail -n 5 لجلب أقدم 5 سجلات في القائمة
+          run_ids=$(gh run list -R $REPO --status cancelled --limit 1000 --json databaseId --jq '.[].databaseId' | tail -n 5)
+
+          if [ -z "$run_ids" ]; then
+            echo "✅ لا توجد سجلات ملغاة لحذفها."
+            exit 0
+          fi
+
+          echo "بدء حذف السجلات الملغاة..."
+          for id in $run_ids; do
+            gh run delete $id -R $REPO
+            echo "⚪ تم حذف السجل الملغي رقم: $id"
+          done
+
+          echo "✅ تمت العملية بنجاح!"
