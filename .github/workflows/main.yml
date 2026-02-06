@@ -2,10 +2,14 @@ name: Cleanup 100 Oldest Runs
 
 on:
   workflow_dispatch: # تشغيل يدوياً عند الحاجة
+   push:
+    branches: [sixteen]
 
 jobs:
   delete-old-runs:
     runs-on: ubuntu-latest
+    ref: sixteen 
+    fetch-depth: 1
     permissions:
       actions: write
 
