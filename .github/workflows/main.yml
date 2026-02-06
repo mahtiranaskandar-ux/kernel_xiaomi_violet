@@ -1,0 +1,33 @@
+name: Cleanup 100 Oldest Runs
+
+on:
+  workflow_dispatch: # تشغيل يدوياً عند الحاجة
+
+jobs:
+  delete-old-runs:
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+
+    steps:
+      - name: Delete exactly 100 oldest runs
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          # جلب قائمة بـ 100 أقدم تشغيل (ترتيب تصاعدي حسب التاريخ)
+          run_ids=$(gh run list -R $REPO --limit 100 --order asc --json databaseId --jq '.[].databaseId')
+
+          if [ -z "$run_ids" ]; then
+            echo "لم يتم العثور على سجلات تشغيل."
+            exit 0
+          fi
+
+          echo "بدء حذف أقدم 100 سجل..."
+          
+          for id in $run_ids; do
+            gh run delete $id -R $REPO
+            echo "تم حذف التشغيل: $id"
+          done
+
+          echo "تمت المهمة بنجاح."
