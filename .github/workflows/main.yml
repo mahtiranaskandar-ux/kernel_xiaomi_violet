@@ -1,25 +1,25 @@
 name: Cleanup 100 Oldest Runs
 
 on:
-  workflow_dispatch: # تشغيل يدوياً عند الحاجة
-   push:
-    branches: [sixteen]
+  workflow_dispatch: # تشغيل يدوياً
+  push:
+    branches:
+      - sixteen # يعمل عند الدفع لفرع sixteen
 
 jobs:
   delete-old-runs:
     runs-on: ubuntu-latest
-    ref: sixteen 
-    fetch-depth: 1
     permissions:
-      actions: write
+      actions: write # ضروري جداً للحذف
 
     steps:
+      # ملاحظة: لا نحتاج لعمل checkout للكود لأننا نستخدم GitHub CLI مباشرة
       - name: Delete exactly 100 oldest runs
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
         run: |
-          # جلب قائمة بـ 100 أقدم تشغيل (ترتيب تصاعدي حسب التاريخ)
+          # جلب قائمة بـ 100 أقدم تشغيل (ترتيب تصاعدي)
           run_ids=$(gh run list -R $REPO --limit 100 --order asc --json databaseId --jq '.[].databaseId')
 
           if [ -z "$run_ids" ]; then
