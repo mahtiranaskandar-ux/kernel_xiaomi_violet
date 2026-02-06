@@ -1,0 +1,35 @@
+name: Cleanup Failed Runs Only
+
+on:
+  workflow_dispatch: # تشغيل يدوياً
+
+jobs:
+  delete-failed-runs:
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+
+    steps:
+      - name: 🗑️ Delete Oldest Failed Runs
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          echo "جاري البحث عن سجلات التشغيل الفاشلة (التي تظهر باللون الأحمر)..."
+          
+          # الفلتر هنا يستخدم --status failure لجلب الفاشلة فقط
+          # ثم tail -n 25 لجلب الأقدم منها
+          run_ids=$(gh run list -R $REPO --status failure --limit 1000 --json databaseId --jq '.[].databaseId' | tail -n 25)
+
+          if [ -z "$run_ids" ]; then
+            echo "✅ لا توجد سجلات فاشلة حالياً."
+            exit 0
+          fi
+
+          echo "بدء حذف السجلات الفاشلة..."
+          for id in $run_ids; do
+            gh run delete $id -R $REPO
+            echo "❌ تم حذف السجل الفاشل رقم: $id"
+          done
+
+          echo "✅ انتهى التنظيف!"
