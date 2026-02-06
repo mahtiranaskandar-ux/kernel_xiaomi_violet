@@ -1,10 +1,10 @@
-name: Cleanup 100 Oldest Runs
+name: Cleanup 25 Oldest Runs
 
 on:
-  workflow_dispatch:
+  workflow_dispatch: # تشغيل يدوياً
   push:
     branches:
-      - sixteen
+      - sixteen # تشغيل عند الدفع لفرع sixteen
 
 jobs:
   delete-old-runs:
@@ -13,23 +13,22 @@ jobs:
       actions: write
 
     steps:
-      - name: Delete exactly 100 oldest runs
+      - name: Delete exactly 25 oldest runs
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
         run: |
-          # 1. جلب كل الـ IDs (الافتراضي هو الأحدث أولاً)
-          # 2. استخدام tail لجلب آخر 100 سجل (وهي الأقدم)
           echo "جاري جلب قائمة التشغيلات..."
           
-          run_ids=$(gh run list -R $REPO --limit 1000 --json databaseId --jq '.[].databaseId' | tail -n 100)
+          # جلب آخر 25 سجل من القائمة (الأقدم)
+          run_ids=$(gh run list -R $REPO --limit 1000 --json databaseId --jq '.[].databaseId' | tail -n 25)
 
           if [ -z "$run_ids" ]; then
             echo "لم يتم العثور على سجلات تشغيل."
             exit 0
           fi
 
-          echo "بدء حذف أقدم 100 سجل تم العثور عليها..."
+          echo "بدء حذف أقدم 25 سجل..."
           
           for id in $run_ids; do
             gh run delete $id -R $REPO
