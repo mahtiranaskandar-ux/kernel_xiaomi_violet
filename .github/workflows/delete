@@ -1,38 +1,34 @@
-name: Cleanup 25 Oldest Runs
+name: Manual Cleanup - 25 Oldest Runs
 
 on:
-  workflow_dispatch: # تشغيل يدوياً
-  push:
-    branches:
-      - sixteen # تشغيل عند الدفع لفرع sixteen
+  workflow_dispatch: # تشغيل يدوياً فقط من تبويب Actions
 
 jobs:
-  delete-old-runs:
+  cleanup:
     runs-on: ubuntu-latest
     permissions:
-      actions: write
+      actions: write # ضروري لمنح صلاحية الحذف
 
     steps:
-      - name: Delete exactly 25 oldest runs
+      - name: 🧹 Delete Oldest 25 Runs
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
         run: |
-          echo "جاري جلب قائمة التشغيلات..."
+          echo "جاري البحث عن أقدم سجلات التشغيل..."
           
-          # جلب آخر 25 سجل من القائمة (الأقدم)
+          # جلب قائمة IDs لآخر 25 سجل في القائمة (وهي الأقدم)
           run_ids=$(gh run list -R $REPO --limit 1000 --json databaseId --jq '.[].databaseId' | tail -n 25)
 
           if [ -z "$run_ids" ]; then
-            echo "لم يتم العثور على سجلات تشغيل."
+            echo "✅ لا توجد سجلات قديمة للحذف."
             exit 0
           fi
 
-          echo "بدء حذف أقدم 25 سجل..."
-          
+          echo "بدء عملية الحذف..."
           for id in $run_ids; do
             gh run delete $id -R $REPO
-            echo "تم حذف التشغيل: $id"
+            echo "🗑️ تم حذف السجل: $id"
           done
 
-          echo "تمت المهمة بنجاح."
+          echo "✅ اكتملت المهمة بنجاح!"
